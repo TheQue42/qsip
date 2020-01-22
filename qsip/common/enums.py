@@ -1,15 +1,14 @@
 from enum import Enum
 
 class PROTOCOL(Enum):
-    TCP = 0
+    TCP = 0  # SO_STREAM??
     UDP = 1
     SCTP = 2
 
 
 class IP_VERSION(Enum):
-    V6 = 0
-    V4 = 1
-
+    V6 = 0  #AF_INET6?
+    V4 = 1  #AF_INET?
 
 class MethodEnum(Enum):
     INVITE = "INVITE"

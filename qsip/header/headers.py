@@ -98,6 +98,35 @@ class CseqHeader(Header):
         hName = self.htype.value
         return hName + ": " +  self.values["method"].value.upper() + " " + str(self.values["number"]) + self.stringifyParameters()
 
+class ViaHeader(Header):
+
+    def __init__(self, proto : PROTOCOL, host = None, port = 0, branch = None): # TODO: Via;branch is parameter!
+        self.protocol = proto
+        self.sent_by = dict()
+        self.sent_by["host"] = host
+        self.sent_by["port"] = port
+        if branch is None:
+            self.branch = str(random.randint(0, 2 ** 60 - 1))  # TODO: ==>Hex
+        else:
+            self.branch = branch
+
+    def setSentBy(self, host: str, port:int):
+        self.sent_by["host"] = host
+        self.sent_by["port"] = port
+
+    def genBranch(self, incremental : False):
+        if not incremental:
+            self.branch = str(random.randint(0, 2 ** 60 - 1))  # TODO: ==>Hex
+        else:
+            self.branch = self.branch + "1"
+
+    def __str__(self):
+        hName = self.htype.value
+        #Via: SIP/2.0/UDP __VIA_HOST__;rport;branch=z9hG4bK__VIA_BRANCH__\r
+        return hName + ": " + "SIP/2.0/" + self.protocol.value + " " +
+                    self.sent_by["host"] + ":" self.sent_by["port"] + ";branch=" + self.branch
+
+        # TODO: Via;branch is parameter!
 # Proxy-Authorization: Digest username="goran",realm="ip-solutions.se",
 # nonce="Ub8wuFG/L4xKkTQ5UwWt8/vkeVEuPWip",uri="sip:gabriel@ip-solutions.se",
 # response="76ab7f721cfca9220ba071c038f83774",algorithm=MD5

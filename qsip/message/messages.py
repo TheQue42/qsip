@@ -6,12 +6,12 @@ from qsip.common.enums import *
 
 class Msg:
     """Base class for SIP Request and Response"""
+    # TODO: Make it impossible to instansiate base Msg class?
 
-    def __init__(self, *, method: MethodEnum, from_info=None, to_info=None, body=""):
+    def __init__(self, *, body=""):
+        """" Base class for SIP Messages """
         self.body = body[:]
-        self.headers = HeaderList()
-        self._method = method
-        # populateMandatoryHeaders(self.headers)
+        self.headers = populateMostMandatoryHeaders()
 
     def setFrom(self, *, uri: str, display_name: str) -> None:
         f_header = NameAddress(HeaderEnum.FROM, uri=uri)
@@ -33,6 +33,8 @@ class Msg:
     def informSocketSrcInfo(self, address: str, port: int, proto: PROTOCOL):
         self.srcIp = address
         self.srcPort = port
+        self.protocol = proto
+
 
     def __str__(self):
         if isinstance(self, Request):
@@ -46,36 +48,50 @@ class Msg:
             all_string = all_string + self.body
 
 
-"""
-    Cseq = CseqHeader(MethodEnum.INVITE, 5, cseqParam="Nej")
-    subject2 = SimpleHeader(HeaderEnum.SUBJECT, "Subject-2", subjectParam2=222)
-    custom1 = CustomHeader(hname="MyCustomHeader", value="MyCustomValue", customParam1="FortyTwo", X=0.1)
-"""
-
 
 class Request(Msg):
+    """Base class for SIP_Requests
 
-    def __init__(self, *, method, headers: HeaderList, body: str, request_uri: str):
-        method = MethodEnum
-        if isinstance(method, str):
-            method = MethodEnum.INVITE
-            m = [mm for mm in MethodEnum if mm == method]
-            print("M", m)
-        else:
-            assert isinstance(method, Enum)
+    Main tasks (eventually):
+    - Validate requirements for various kinds of requests such as:
+      - Contact in INVITE and SUBSCRIBE requests (NOTIFY after rfc6665)
+    - Whatever else I can think of...
 
-        if request_uri is None:
+    """
+
+    def __init__(self, *,
+                 method,
+                 from_info=None,
+                 to_info=None,
+                 request_uri=None,
+                 body: str,
+                 copy_req_uri_to_to=True):
+        """
+
+        :type headers: HeaderList
+        :type method: str or MethodEnum
+        """
+        self._method = MethodEnum.get(method)
+        self.headers = HeaderList()
+
+        if request_uri is not None:
             self._request_uri = request_uri
-        else:
-            self._request_uri = headers.headerList[HeaderEnum.TO]
+            if copy_req_uri_to_to :
+                self.headers[HeaderEnum.To]["uri"] = request_uri
+                self.headers[HeaderEnum.To]["display_name"] = "AutoFilled"
 
+        # Constructor fills in most mandatory headers.
+        super().__init__(body=body)
 
 class Response:
 
     def __init__(self, response_code: int, response_text: str, headers: HeaderList, body=""):
         self._response_code = response_code
         self._response_text = response_text
+        self.headers = headers
 
+    def create(self, request : Request, response_code: int, response_text: str):
+        return Response(response_code, response_text, request.headers)
 
 if __name__ == "__main__":
     print("__file__", __file__, "name: ", __name__, ", vars: ", vars())

@@ -90,35 +90,25 @@ class QSipUa:
         if not validateDefaultHeaders(headers):
             return False
 
-        populateMandatoryHeaders(headers)
+        populateMostMandatoryHeaders(headers)
 
 
     def sendMessage(self, dst_addr: str, dst_port: int, request_uri: str, body: str) -> int:
         ### TODO: We'll most definitely need ;rport. ==> Currently hardcoded into via-header.
 
         current_socket, local_addr, local_port = self.get_socket(dst_addr, dst_port)
+        msgRequest = Request(metod="MESSAGE",
+                             from_info={"uri" : "kenneth@ip-s.se"},
+                             to_info={"uri" : request_uri},
+                             body=body)
 
         if local_port == 0 or current_socket is None:
             print("Failed binding/connecting")
             return 0
         print(f"Source is: {local_addr}, Port: {local_port}, with socket: {current_socket.fileno()}")
 
-        msg = str(requestTemplate)
-        msg = msg.replace(templateMap["method"], "OPTIONS")
-        msg = msg.replace(templateMap["requri"], request_uri)
-        msg = msg.replace(templateMap["from"], "sip:taisto@trippelsteg.se")
-        msg = msg.replace(templateMap["to"], request_uri)
-        msg = msg.replace(templateMap["route"], "sip:proxy@10.9.24.1:5060")
-        viaHost = local_addr + ":" + str(local_port)
-        msg = msg.replace(templateMap["viahost"], viaHost)
-        #msg = msg.replace(templateMap["viabranch"], generateViaBranch())
-        msg = msg.replace(templateMap["contact"], "sip:taisto@10.9.24.44:5060")
-        msg = msg.replace(templateMap["callid"], "dsadasdasda")
-        msg = msg.replace(templateMap["cseqnr"], "5")
-        msg = msg.replace("__CONTENT_LENGTH__", str(len(body)) )
-        msg = msg + "\r"
-        msg = msg + body
-        result = current_socket.sendto(msg.encode(), (dst_addr, dst_port))
+
+        result = current_socket.sendto(msgRequest.encode(), (dst_addr, dst_port))
 
         if result != len(msg.encode()):
             current_socket.close()
