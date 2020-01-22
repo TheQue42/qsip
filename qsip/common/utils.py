@@ -1,28 +1,25 @@
 import hashlib
 from qsip.header import *
 
-"""
-Via: SIP/2.0/UDP __VIA_HOST__;rport;branch=z9hG4bK__VIA_BRANCH__\r
-Route: __ROUTE_URI__\r
-Max-Forwards: 70\r
-From: __FROM_HEADER__\r
-To: __TO_HEADER__\r
-Call-ID: __CALL_ID__\r
-CSeq: __CSEQ_NUMBER__ __METHOD__\r
-User-Agent: Sping/0.0.0.0.0.1\r
-Contact: __CONTACT_URI__\r
-Expires: 0\r
-Content-Length:  0\r
-\r
-"""
+
+def createRandomString(size=31):
+    return str(random.randint(0, 2 ** size - 1))
 
 def populateMostMandatoryHeaders(headers : HeaderList):
-    cseq = CseqHeader(MethodEnum.INVITE, 5, cseqParam="Nej")
-    subject = SimpleHeader(HeaderEnum.SUBJECT, "Subject-2", subjectParam2=222)
-    call-id = SimpleHeader(HeaderEnum.CALL_ID, "", subjectParam2=222)
-    via = CustomHeader(hname="Via", value="SIP/2.0/UDP __VIA_HOST__:__VIA_PORT__ ;rport;branch=z9hG4bK" + viaBranch)
+
+    cseq = CseqHeader(MethodEnum.INVITE, 5)
+    subject = SimpleHeader(HeaderEnum.SUBJECT, "Subject-2")
+    call_id = SimpleHeader(HeaderEnum.CALL_ID, createRandomString() + "@IP_Domain")
+    maxForwards = SimpleHeader(HeaderEnum.MAX_FWD, "70")
+    viaH = ViaHeader(PROTOCOL.UDP) # TODO: ;branch as parameter
     userAgent = CustomHeader(hname="User-Agent", value="Sping/0.0.0.0.0.1")
 
+    headers.add(cseq)
+    headers.add(subject)
+    headers.add(call_id)
+    headers.add(viaH)
+    headers.add(userAgent)
+    headers.add(maxForwards)
     pass
 
 def calc_digest_response(self,

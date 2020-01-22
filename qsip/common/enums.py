@@ -41,7 +41,7 @@ class MethodEnum(Enum):
 
     # ::is? ::convert? ::fromStr?
     def get(name: str):
-        print("Will search for", name)
+        #print("Will search for", name)
         m = [meth for meth in list(MethodEnum) if meth == name]
         return m[0]
 

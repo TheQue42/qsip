@@ -8,3 +8,7 @@ class InvalidHeader(GenericSipError):
 
 class ParameterExists(GenericSipError):
     pass
+
+
+class InvalidParameter(GenericSipError):
+    pass

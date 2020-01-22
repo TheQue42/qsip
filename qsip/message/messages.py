@@ -8,10 +8,12 @@ class Msg:
     """Base class for SIP Request and Response"""
     # TODO: Make it impossible to instansiate base Msg class?
 
-    def __init__(self, *, body=""):
+    def __init__(self, *, body="", headers: HeaderList):
         """" Base class for SIP Messages """
         self.body = body[:]
-        self.headers = populateMostMandatoryHeaders()
+        self.headers = headers
+        populateMostMandatoryHeaders(self.headers)
+        # TODO: Add content-type and Content-Length
 
     def setFrom(self, *, uri: str, display_name: str) -> None:
         f_header = NameAddress(HeaderEnum.FROM, uri=uri)
@@ -30,23 +32,30 @@ class Msg:
     def addHeader(self, header: Header) -> None:
         self.headers.add(header)
 
-    def informSocketSrcInfo(self, address: str, port: int, proto: PROTOCOL):
+    def informSocketSrcInfo(self, address: str, port: int, proto = PROTOCOL.UDP):
         self.srcIp = address
         self.srcPort = port
         self.protocol = proto
-
+        viaList = self.headers.headerList[HeaderEnum.VIA]
+        if isinstance(viaList, list):
+            viaList[0].setSentBy(address, port)
+        else:
+            viaList.setSentBy(address, port)
 
     def __str__(self):
+        #print("Running __str__ in:; ", __class__, "headers:", self.headers)
+        all_string = ""
         if isinstance(self, Request):
-            all_string = self._method.value + " " + self._request_uri + " SIP/2.0"
+            all_string = self._method.value + " " + self.request_uri + " SIP/2.0"
         if isinstance(self, Response):
             all_string = "SIP/2.0 " + self._response_code + self._response_text
         all_string = all_string + "\r\n"
-        all_string = str(self.headers)
+        #print(f"StartingLine: {all_string}")
+        all_string = all_string + str(self.headers)
         if len(self.body) > 0:
             all_string = all_string + "\r\n"
             all_string = all_string + self.body
-
+        return all_string
 
 
 class Request(Msg):
@@ -73,15 +82,20 @@ class Request(Msg):
         """
         self._method = MethodEnum.get(method)
         self.headers = HeaderList()
-
+        self.request_uri = str()
         if request_uri is not None:
-            self._request_uri = request_uri
-            if copy_req_uri_to_to :
+            if not request_uri.find("sip:", 0, 4):
+                self.request_uri = "sip:" + request_uri
+            else:
+                self.request_uri = request_uri
+            # TODO: Search for, and escape weird chars...
+
+            if to_info is None and copy_req_uri_to_to :
                 self.headers[HeaderEnum.To]["uri"] = request_uri
                 self.headers[HeaderEnum.To]["display_name"] = "AutoFilled"
 
         # Constructor fills in most mandatory headers.
-        super().__init__(body=body)
+        super().__init__(body=body, headers=self.headers)
 
 class Response:
 

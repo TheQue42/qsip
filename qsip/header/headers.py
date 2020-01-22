@@ -1,6 +1,8 @@
 from enum import Enum
 from qsip.common.enums import *
+from qsip.common.exceptions import *
 import random
+
 
 class HeaderEnum(Enum):
     CALL_ID = "Call-ID"
@@ -19,6 +21,7 @@ class HeaderEnum(Enum):
     SERVER = "Server"
     SUBJECT = "Subject"
     USER_AGENT = "User-Agent"
+    MAX_FWD = "Max-Forwards"
     CUSTOM = ""
 
     def __eq__(self, other):
@@ -39,6 +42,7 @@ class HeaderEnum(Enum):
 
 __VIA_MAGIC_COOKE = "z9hG4Bk"
 
+
 ### TODO: Define multiHeader, or SingleHeader to indicate maxNrOfCount.
 
 class Header:
@@ -51,13 +55,13 @@ class Header:
     # GenericHeader: Value ;param1=Abc ;param2=xyz
     def __init__(self, *, htype: HeaderEnum, hvalues: dict(), **kwargs):
         self.htype = htype
-        self.values = hvalues
+        self.values = hvalues # copy.deep?
         self.parameters = kwargs  # Param Names in .keys()
 
     def addParam(self, name: str, value: str, allow_update=False):
         # TODO Append multiple parameters, allowAppend=False
         if str in self.parameters.keys() or allow_update:
-            raise ParameterExists
+            raise InvalidParameter
         self.parameters[name] = value
 
     def stringifyParameters(self) -> str:
@@ -67,9 +71,9 @@ class Header:
         return params
 
     def __str__(self) -> str:
-        #print("Using base-class __str__ for:", self.htype.value)
+        # print("Using base-class __str__ for:", self.htype.value)
         hName = self.htype.value
-        assert len(self.values.keys()) == 1
+        assert len(self.values.keys()) == 1, "Base-class only handles single value-headers"
         keys = [key for key in self.values.keys()]
         value = self.values[keys[0]]
         return hName + ": " + str(value) + self.stringifyParameters()
@@ -84,11 +88,12 @@ class SimpleHeader(Header):
 
     # NO overriding of __str__ here. Use base-class
 
+
 class CseqHeader(Header):
 
     def __init__(self, method: MethodEnum, number=-1, **kwargs):
-        if number >= 0:
-            number = str(random.randint(0, 2 ** 32 - 1))
+        if number < 0:
+            number = str(random.randint(0, 2 ** 31 - 1))
         values = {}
         values["method"] = method
         values["number"] = number
@@ -96,25 +101,32 @@ class CseqHeader(Header):
 
     def __str__(self) -> str:
         hName = self.htype.value
-        return hName + ": " +  self.values["method"].value.upper() + " " + str(self.values["number"]) + self.stringifyParameters()
+        return hName + ": " + self.values["method"].value.upper() + " " \
+               + str(self.values["number"]) + self.stringifyParameters()
+
 
 class ViaHeader(Header):
-
-    def __init__(self, proto : PROTOCOL, host = None, port = 0, branch = None): # TODO: Via;branch is parameter!
+    
+    def __init__(self, proto: PROTOCOL, host=None, port=0, branch=None, **kwargs):  # TODO: Via;branch is parameter!
         self.protocol = proto
-        self.sent_by = dict()
-        self.sent_by["host"] = host
-        self.sent_by["port"] = port
+        assert self.protocol == PROTOCOL.UDP, "Only UDP supported"
+        values = {}
+        values["sent_by"] = {}
+        values["sent_by"]["host"] = host
+        values["sent_by"]["port"] = port
+        values["prefix"] = "SIP/2.0/" + self.protocol.name
         if branch is None:
             self.branch = str(random.randint(0, 2 ** 60 - 1))  # TODO: ==>Hex
         else:
             self.branch = branch
+        super().__init__(htype=HeaderEnum.VIA, hvalues=values, **kwargs)
 
-    def setSentBy(self, host: str, port:int):
-        self.sent_by["host"] = host
-        self.sent_by["port"] = port
+    def setSentBy(self, host: str, port: int):
+        self.values["sent_by"]["host"] = host
+        self.values["sent_by"]["port"] = port
+        print("Setting: ", self.values)
 
-    def genBranch(self, incremental : False):
+    def genBranch(self, incremental: False):
         if not incremental:
             self.branch = str(random.randint(0, 2 ** 60 - 1))  # TODO: ==>Hex
         else:
@@ -122,11 +134,21 @@ class ViaHeader(Header):
 
     def __str__(self):
         hName = self.htype.value
-        #Via: SIP/2.0/UDP __VIA_HOST__;rport;branch=z9hG4bK__VIA_BRANCH__\r
-        return hName + ": " + "SIP/2.0/" + self.protocol.value + " " +
-                    self.sent_by["host"] + ":" self.sent_by["port"] + ";branch=" + self.branch
+        # Via: SIP/2.0/UDP __VIA_HOST__;rport;branch=z9hG4bK__VIA_BRANCH__\r
+        assert self.values["sent_by"]["host"] is not None \
+               and self.values["sent_by"]["port"] is not None, "You need to set IP Info"
+
+        host = self.values["sent_by"]["host"]
+        port = self.values["sent_by"]["port"]
+        #print(f"Host: {host} and Port: {port}", "Values:", self.values)
+        if port is None or port <= 0:
+            port = 5060
+        # TODO: if self.sent_by["host"] == IPv6 ==> [ipv6 reference]
+        return hName + ": " + "SIP/2.0/" + self.protocol.name + " " + host + ":" + str(port) + ";branch=" + self.branch
 
         # TODO: Via;branch is parameter!
+
+
 # Proxy-Authorization: Digest username="goran",realm="ip-solutions.se",
 # nonce="Ub8wuFG/L4xKkTQ5UwWt8/vkeVEuPWip",uri="sip:gabriel@ip-solutions.se",
 # response="76ab7f721cfca9220ba071c038f83774",algorithm=MD5
@@ -136,7 +158,8 @@ class CustomHeader(Header):
     TODO: We need to decide if the keys of hvalues["cnonse"] = "skdjakjdk" should be used for anything
           or if we just ignore them as Accept: text/plain, text/html
     """
-    def __init__(self, *, hname: str, value, **kwargs): # NOTE, value may be dict or string.
+
+    def __init__(self, *, hname: str, value, **kwargs):  # NOTE, value may be dict or string.
         self.hname = hname  # Only custom header has to keep track of Header name as string.
         if isinstance(value, dict):
             super().__init__(htype=HeaderEnum.CUSTOM, hvalues=value, **kwargs)
@@ -153,7 +176,7 @@ class CustomHeader(Header):
             hValue = hValue + self.values[val]
             if i < keyCount:
                 hValue = hValue + ", "
-        return hName + ": " +  hValue + self.stringifyParameters()
+        return hName + ": " + hValue + self.stringifyParameters()
 
 
 class NameAddress(Header):
@@ -192,12 +215,12 @@ class NameAddress(Header):
         # TODO: Search for, and escape weird chars...
 
         if len(self.parameters.keys()) > 0:
-            uri = "<" + uri +  ">"
+            uri = "<" + uri + ">"
 
         hValue = hValue + uri
         return hName + ": " + hValue + self.stringifyParameters()
 
-    def setUri(self, uri : str):
+    def setUri(self, uri: str):
         self.values["uri"] = uri
 
 
@@ -215,16 +238,16 @@ class HeaderList:  # Not reallyu a list...
         # they were added? It wont change inter-(same)-header order, so it shouldnt FAIL, but it still might feel
         # weird?
         htype = header.htype
-        print("Checking key: ", type(htype))
+        #print("Checking key: ", type(htype))
         if htype not in self.headerList.keys():
-            #print("Adding: ", str(header))
+            # print("Adding: ", str(header))
             self.headerList[htype] = [header]
         else:
             if addToTop:
                 self.headerList[htype].append(header)
             else:
                 self.headerList[htype].insert(len(self.headerList[htype]), header)
-            #print("Additional: ", len(self.headerList[htype]))
+            # print("Additional: ", len(self.headerList[htype]))
 
     def __str__(self) -> str:
         mHeaders = ""
@@ -234,12 +257,12 @@ class HeaderList:  # Not reallyu a list...
                 mHeaders = mHeaders + "\r\n"
         return mHeaders
 
-    def hasHeader(self, hType : HeaderEnum) -> int:
+    def hasHeader(self, hType: HeaderEnum) -> int:
         if hType in self.headerList.keys():
             return len(self.headerList[hType])
-            print(self.headerList[hType])
         else:
             return 0
+
 
 if __name__ == "__main__":
     print("__file__", __file__, "name: ", __name__, ", vars: ", vars())

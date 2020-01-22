@@ -82,39 +82,55 @@ class QSipUa:
 
         #qsip.sendRegister(self._username, self._password)
 
-    def sendRequest(self, method: str, request_uri: str, body: str, headers=None) -> bool:
+    def sendRequest(self, *,
+                    req_method,
+                    request_uri: str,
+                    next_hop,
+                    req_from=None,
+                    req_to=None,
+                    req_body="") -> bool:
         """
+        :type next_hop: dict
         """
-        if not isinstance(headers, dict):
-            return False;
-        if not validateDefaultHeaders(headers):
-            return False
+        current_socket, local_addr, local_port = self.get_socket(next_hop["addr"], next_hop["port"])
 
-        populateMostMandatoryHeaders(headers)
-
-
-    def sendMessage(self, dst_addr: str, dst_port: int, request_uri: str, body: str) -> int:
-        ### TODO: We'll most definitely need ;rport. ==> Currently hardcoded into via-header.
-
-        current_socket, local_addr, local_port = self.get_socket(dst_addr, dst_port)
-        msgRequest = Request(metod="MESSAGE",
-                             from_info={"uri" : "kenneth@ip-s.se"},
-                             to_info={"uri" : request_uri},
-                             body=body)
+        msgRequest = Request(method=req_method,
+                             from_info=req_from,
+                             to_info=req_to,
+                             request_uri=request_uri,
+                             body=req_body)
 
         if local_port == 0 or current_socket is None:
             print("Failed binding/connecting")
             return 0
+
         print(f"Source is: {local_addr}, Port: {local_port}, with socket: {current_socket.fileno()}")
+        msgRequest.informSocketSrcInfo(local_addr, local_port)
+        print("======== Sending ============")
+        print(str(msgRequest))
+        print("======== Sending ============")
+        bytesToSend = str(msgRequest).encode()
+        result = current_socket.sendto(bytesToSend, (next_hop["addr"], next_hop["port"]))
 
-
-        result = current_socket.sendto(msgRequest.encode(), (dst_addr, dst_port))
-
-        if result != len(msg.encode()):
+        if result != len(bytesToSend):
             current_socket.close()
             print("Failed Sending Entire messages")
             # TODO: Remove from socket storage
         return result
+
+    def sendMessage(self, *,
+                    request_uri: str,
+                    next_hop,
+                    msg_from=None,
+                    msg_to=None,
+                    msg_body="") -> int:
+
+        ### TODO: We'll most definitely need ;rport. ==> Currently hardcoded into via-header.
+        self.sendRequest(req_method=MethodEnum.MESSAGE,
+                         request_uri=request_uri,
+                         next_hop=next_hop,
+                         req_from=msg_from, req_to=msg_to,
+                         req_body=msg_body)
 
     def checkAndPrint(self, a, b):
         print(f"A: {a}, B:{b}")
@@ -125,43 +141,8 @@ class QSipUa:
                                                "49e4ab81fb07c2228367573b093ba96efd292066",
                                                "00000001", "8d82cf2d1e7ff78b28570c311d2e99bd", "HejsanSvejsan")
         print("Challenge Response: ", digestResponse)
-
-        #    result = sipSender.sendMessage("10.9.24.132", 5060, "sip:taisto@trippelsteg.se", "HejsanSvejsan1")
-
-        method1 = "InVite"
-        method2 = MethodEnum.INVITE
-        #print("Vals: ", list(MethodEnum))
-        m = getMethod("InvITE")
-        M2 = MethodEnum.get("CaNCeL")
-        print("Found M:", m, "aND", M2)
-        sys.exit()
-        h = HeaderList()
-        na1 = NameAddress(HeaderEnum.FROM, uri="taisto@kenneth.qvist", display_name="Taisto k. Qvist", param1="p1", param2="p2")
-        Cseq = CseqHeader(MethodEnum.INVITE, 5, cseqParam="Nej")
-        subject2 = SimpleHeader(HeaderEnum.SUBJECT, "Subject-2", subjectParam2=222)
-        custom1 = CustomHeader(hname="MyCustomHeader", value="MyCustomValue", customParam1="FortyTwo", X=0.1)
-        vvv = dict()
-        vvv["One"] = "realm=trippelsteg.se"
-        vvv["Two"] = "digest"
-        vvv["Three"] = "cnonce=9823139082013982"
-        print("Types:", type(vvv), type(vvv.keys()))
-
-        custom2 = CustomHeader(hname="Authorization", value=vvv, customParam2="FortyThree", X=0.2)
-
-        hlist = HeaderList()
-        hlist.add(na1)
-        hlist.add(Cseq)
-        hlist.add(subject1)
-        hlist.add(custom1)
-
-        #print("vars:", vars(hlist))
-        print("------------------")
-        test = str(hlist)
-        print(test)
-        print("HasHeader1", hlist.hasHeader(HeaderEnum.CALL_ID))
-        print("HasHeader2", hlist.hasHeader(HeaderEnum.SUBJECT))
-        print("IsEqual:", HeaderEnum.SUBJECT == "SubJect")
-
+        viaH = ViaHeader(PROTOCOL.UDP)  # TODO: ;branch as parameter
+        print("ViaHeader", viaH)
 
 if __name__ == "__main__":
     method = "InVite"
