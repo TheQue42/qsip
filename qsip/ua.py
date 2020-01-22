@@ -1,21 +1,28 @@
-#import time
-
+import time
+import sys
 import socket
-    
+from qsip.common import *
+from qsip.header import *
+from qsip.message import *
+
 class QSipUa:
 
     def __init__(self,
                  localIpInfo=None,
                  outgoingProxyInfo=None,
+                 auth_info = None,
                  protocol = "UDP"):
 
         """Initialize the SIP service."""
-        self._username = ""
-        self._password = ""
+        if auth_info is not None:
+            assert isinstance(auth_info, dict), "Authentication info should be supplied in dict{username/password}"
+            self._username = auth_info["username"]
+            self._password = auth_info["password"]
 
         if  outgoingProxyInfo is None:
             self._outgoingProxyInfo = dict(addr="", port=0)
         else:
+            assert isinstance(outgoingProxyInfo, dict), "Not supplied as dict{addr/port}"
             # TODO  Validate Dict entry.
             # outgoingProxyInfo{"addr"} = IPv4/Host/IPv6 (eventually)
             # outgoingProxyInfo{"port"} = DNS NAPTR instead? 0 TODO: Should mean NAPTR?
@@ -23,16 +30,18 @@ class QSipUa:
             self._outgoingProxyInfo = outgoingProxyInfo
 
         if localIpInfo is None:
-            # TODO  Validate Dict entry.
             self._localIpInfo = dict(addr="", port=0)
         else:
+            assert isinstance(localIpInfo, dict), "Not supplied as dict{addr/port}"
+            # TODO  Validate Dict entry.
             self._localIpInfo = localIpInfo
             print("LocalIPInfo set to: ", localIpInfo)
 
         self._protocol = PROTOCOL.UDP #For now.
 
         # Since we're binding and connecting the socket towards each specific dstAddr, we need to keep track of which is
-        # which. Its currently based on key="addr", but with TCP support, we're gonna have to change that. TODO: TCP/UDP
+        # which. Its currently based ONLY on key="addr", but with TCP support, we're gonna have to change that,
+        # to include port+protocol TODO: TCP/UDP
         self._socketStorage = {}
         self._messageQueue = []
 
@@ -75,12 +84,6 @@ class QSipUa:
 
     def sendRequest(self, method: str, request_uri: str, body: str, headers=None) -> bool:
         """
-        Send any SIP Request
-        :param method:
-        :param request_uri:
-        :param body:
-        :param headers:
-        :return:
         """
         if not isinstance(headers, dict):
             return False;
@@ -90,9 +93,7 @@ class QSipUa:
         populateMandatoryHeaders(headers)
 
 
-
     def sendMessage(self, dst_addr: str, dst_port: int, request_uri: str, body: str) -> int:
-        """Send a SIP messages to a specific IP-destination, with a specific dst-uri?"""
         ### TODO: We'll most definitely need ;rport. ==> Currently hardcoded into via-header.
 
         current_socket, local_addr, local_port = self.get_socket(dst_addr, dst_port)
@@ -124,6 +125,52 @@ class QSipUa:
             print("Failed Sending Entire messages")
             # TODO: Remove from socket storage
         return result
+
+    def checkAndPrint(self, a, b):
+        print(f"A: {a}, B:{b}")
+        return a == b
+
+    def testStuff(self):
+        digestResponse = calc_digest_response("bob","bee.net", "bob", "REGISTER", "sip:bee.net",
+                                               "49e4ab81fb07c2228367573b093ba96efd292066",
+                                               "00000001", "8d82cf2d1e7ff78b28570c311d2e99bd", "HejsanSvejsan")
+        print("Challenge Response: ", digestResponse)
+
+        #    result = sipSender.sendMessage("10.9.24.132", 5060, "sip:taisto@trippelsteg.se", "HejsanSvejsan1")
+
+        method1 = "InVite"
+        method2 = MethodEnum.INVITE
+        #print("Vals: ", list(MethodEnum))
+        m = getMethod("InvITE")
+        M2 = MethodEnum.get("CaNCeL")
+        print("Found M:", m, "aND", M2)
+        sys.exit()
+        h = HeaderList()
+        na1 = NameAddress(HeaderEnum.FROM, uri="taisto@kenneth.qvist", display_name="Taisto k. Qvist", param1="p1", param2="p2")
+        Cseq = CseqHeader(MethodEnum.INVITE, 5, cseqParam="Nej")
+        subject2 = SimpleHeader(HeaderEnum.SUBJECT, "Subject-2", subjectParam2=222)
+        custom1 = CustomHeader(hname="MyCustomHeader", value="MyCustomValue", customParam1="FortyTwo", X=0.1)
+        vvv = dict()
+        vvv["One"] = "realm=trippelsteg.se"
+        vvv["Two"] = "digest"
+        vvv["Three"] = "cnonce=9823139082013982"
+        print("Types:", type(vvv), type(vvv.keys()))
+
+        custom2 = CustomHeader(hname="Authorization", value=vvv, customParam2="FortyThree", X=0.2)
+
+        hlist = HeaderList()
+        hlist.add(na1)
+        hlist.add(Cseq)
+        hlist.add(subject1)
+        hlist.add(custom1)
+
+        #print("vars:", vars(hlist))
+        print("------------------")
+        test = str(hlist)
+        print(test)
+        print("HasHeader1", hlist.hasHeader(HeaderEnum.CALL_ID))
+        print("HasHeader2", hlist.hasHeader(HeaderEnum.SUBJECT))
+        print("IsEqual:", HeaderEnum.SUBJECT == "SubJect")
 
 
 if __name__ == "__main__":

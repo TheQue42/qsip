@@ -1,4 +1,5 @@
 from enum import Enum
+from qsip.common.enums import *
 import random
 
 class HeaderEnum(Enum):
@@ -26,6 +27,8 @@ class HeaderEnum(Enum):
         else:
             if isinstance(other, str):
                 return self.name.lower() == other.lower()
+            else:
+                assert False, "Can only compare with str(ings) or correct-type ENUMs:"
 
     # We need to be hashable, and defining __eq__() undefines the default __hash__
     # It should(?) be safe to reuse the Object-class version, since we're not storing anything else
@@ -33,18 +36,6 @@ class HeaderEnum(Enum):
     def __hash__(self) -> int:
         return super().__hash__()
 
-class MethodEnum(Enum):
-    INVITE = "INVITE"
-    CANCEL = "CANCEL"
-    ACK = "ACK"
-    BYE = "BYE"
-    OPTIONS = "OPTIONS"
-    REGISTER = "REGISTER"
-    SUBSCRIBE = "SUBSCRIBE"
-    PUBLISH = "PUBLISH"
-    NOTIFY = "NOTIFY"
-    REFER = "REFER"
-    MESSAGE = "MESSAGE"
 
 __VIA_MAGIC_COOKE = "z9hG4Bk"
 

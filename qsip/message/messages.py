@@ -2,6 +2,7 @@ from enum import Enum
 
 from qsip.common import *
 from qsip.header import *
+from qsip.common.enums import *
 
 class Msg:
     """Base class for SIP Request and Response"""

@@ -1,15 +1,5 @@
 import socket
-from enum import Enum
-
-class PROTOCOL(Enum):
-    TCP = 0
-    UDP = 1
-    SCTP = 2
-
-
-class IP_VERSION(Enum):
-    V6 = 0
-    V4 = 1
+from qsip.common.enums import *
 
 def create_socket(proto : PROTOCOL, ip_version : IP_VERSION) -> socket:
     """Connect/authenticate to SIP Server."""
