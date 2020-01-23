@@ -13,6 +13,7 @@ class Msg:
         self.body = body[:]
         self.headers = headers
         populateMostMandatoryHeaders(self.headers)
+        #print(vars(self.headers))
         # TODO: Add content-type and Content-Length
 
     def setFrom(self, *, uri: str, display_name: str) -> None:
@@ -31,6 +32,19 @@ class Msg:
 
     def addHeader(self, header: Header) -> None:
         self.headers.add(header)
+
+    def getHeaders(self, htype=None) -> HeaderList:
+        """Return a new list with only the headers specified"""
+
+        if htype is not None:
+            assert isinstance(htype, HeaderEnum), "Must be HeaderEnum"
+            hlist = HeaderList()
+            [[hlist.add(hh)] for hh in self.headers if hh.htype == htype]
+            #print("hlist:", hlist )
+            return hlist
+        else:
+            return self.headers
+
 
     def informSocketSrcInfo(self, address: str, port: int, proto = PROTOCOL.UDP):
         self.srcIp = address
@@ -53,6 +67,7 @@ class Msg:
         #print(f"StartingLine: {all_string}")
         all_string = all_string + str(self.headers)
         if len(self.body) > 0:
+            # TODO: Add Content-Type and Content-Length(If TCP)
             all_string = all_string + "\r\n"
             all_string = all_string + self.body
         return all_string
@@ -72,28 +87,23 @@ class Request(Msg):
                  method,
                  from_info=None,
                  to_info=None,
-                 request_uri=None,
-                 body: str,
-                 copy_req_uri_to_to=True):
+                 request_uri=str,
+                 body: str):
         """
 
         :type headers: HeaderList
         :type method: str or MethodEnum
         """
         self._method = MethodEnum.get(method)
+        self.request_uri = addSipToUri(request_uri)
         self.headers = HeaderList()
-        self.request_uri = str()
-        if request_uri is not None:
-            if not request_uri.find("sip:", 0, 4):
-                self.request_uri = "sip:" + request_uri
-            else:
-                self.request_uri = request_uri
-            # TODO: Search for, and escape weird chars...
 
-            if to_info is None and copy_req_uri_to_to :
-                self.headers[HeaderEnum.To]["uri"] = request_uri
-                self.headers[HeaderEnum.To]["display_name"] = "AutoFilled"
+        # TODO: Search for, and escape weird chars...
 
+        toH = NameAddress(HeaderEnum.TO, uri=to_info["uri"], display_name=to_info["display_name"])
+        fromH = NameAddress(HeaderEnum.FROM, uri=from_info["uri"], display_name=from_info["display_name"])
+        self.headers.add(fromH)
+        self.headers.add(toH)
         # Constructor fills in most mandatory headers.
         super().__init__(body=body, headers=self.headers)
 

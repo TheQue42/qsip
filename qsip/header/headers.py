@@ -4,6 +4,73 @@ from qsip.common.enums import *
 from qsip.common.exceptions import *
 from qsip.common.utils import *
 
+class SipHost:
+
+    def isFqdn(self, addr : str ):
+        return False
+
+    def __init__(self, addr: str, port=0):
+        assert len(addr) > 0, "Zero length address/host"
+        if self.isFqdn(addr):       # TODO FqDN logic NOT defined
+            self._fqdn = addr
+            self.addr = None
+            self._resolved = False
+        else:
+            self.addr = addr
+            self.port = port
+            if addr.find(":") < 0:
+                self.ipVersion = IP_VERSION.V4
+            else:
+                self.ipVersion = IP_VERSION.V6
+            self._resolved = True
+
+    def isResolved(self):
+        return self._resolved
+
+    def resolve(self, naptr=False) -> list:
+        # Set value in self.addr?
+        return []
+        # Do lots of RFC3263 Magic
+
+    def __str__(self):
+        if self.port is None or self.port == 0:
+            return self.addr
+        else:
+            return self.addr + ":" + str(self.port)
+
+
+class UriParams:
+    def __init__(self, **kwargs):
+        self.parameters = kwargs
+
+    def __str__(self):
+        params = str()
+        for paramKey in self.parameters.keys():
+            params = params + ";" + paramKey + "=" + str(self.parameters[paramKey])
+        return params
+
+
+class SipUri:
+
+    def __init__(self, *, user: str, addr: str, port=0, **kwargs):
+        self.user = user
+        self.host = SipHost(addr, port)
+        self.uri_params = UriParams(**kwargs)
+
+    def __str__(self):
+        if self.user is None or len(self.user) == 0:
+            return "sip:" + str(self.host) + str(self.uri_params)
+        else:
+            return "sip:" + self.user + "@" + str(self.host) + str(self.uri_params)
+
+def createUriFromHost(host: SipHost) -> SipUri:
+    return SipUri(user="", addr=host.addr, port=host.port)
+
+def createUriFromString(uri_string: str) -> SipUri:
+    # TODO: Lots of clever parsing
+    pass
+
+
 
 class HeaderEnum(Enum):
     CALL_ID = "Call-ID"
@@ -23,6 +90,7 @@ class HeaderEnum(Enum):
     SUBJECT = "Subject"
     USER_AGENT = "User-Agent"
     MAX_FWD = "Max-Forwards"
+    CONTENT_TYPE = "Content-Type"
     CUSTOM = ""
 
     def __eq__(self, other):
@@ -40,6 +108,7 @@ class HeaderEnum(Enum):
     def __hash__(self) -> int:
         return super().__hash__()
 
+_SINGLE_USE_HEADERS = [HeaderEnum.FROM, HeaderEnum.TO, HeaderEnum.CALL_ID, HeaderEnum.CSEQ, HeaderEnum.CONTENT_TYPE]
 
 _VIA_MAGIC_COOKE: str = "z9hG4Bk"
 
@@ -56,8 +125,8 @@ class Header:
     # GenericHeader: Value ;param1=Abc ;param2=xyz
     def __init__(self, *, htype: HeaderEnum, hvalues: dict(), **kwargs):
         self.htype = htype
-        self.values = hvalues # copy.deep?
-        self.parameters = kwargs  # Param Names in .keys()
+        self.values = hvalues       # copy.deep?
+        self.parameters = kwargs    # Param Names in .keys()
 
     def addParam(self, name: str, value: str, allow_update=False):
         # TODO Append multiple parameters, allowAppend=False
@@ -103,7 +172,7 @@ class CseqHeader(Header):
     def __str__(self) -> str:
         hName = self.htype.value
         return hName + ": " + self.values["method"].value.upper() + " " \
-               + str(self.values["number"]) + self.stringifyParameters()
+               + str(self.values["number"])  # + self.stringifyParameters() CSeq not allowed to have params...
 
 
 class ViaHeader(Header):
@@ -116,22 +185,44 @@ class ViaHeader(Header):
         values["sent_by"]["host"] = host
         values["sent_by"]["port"] = port
         values["prefix"] = "SIP/2.0/" + self.protocol.name
+        if "branch" not in kwargs.keys():
+            self.branch = _VIA_MAGIC_COOKE + "_" + genRandomIntString(64)
+        else:
+            assert isinstance(kwargs["branch"], str), ";branch param not supplied as string"
+            self.branch = kwargs["branch"]
+            kwargs.pop("branch", None)
         super().__init__(htype=HeaderEnum.VIA, hvalues=values, **kwargs)
+
+    def getBranch(self) -> str:
+        return self.branch
 
     def setSentBy(self, host: str, port: int):
         self.values["sent_by"]["host"] = host
         self.values["sent_by"]["port"] = port
-        print("Setting: ", self.values)
 
-    def randomizeBranch(self, incremental: False):
+    def randomizeBranch(self, incremental: False, addMagicCookie=True):
         if not incremental:
+            if addMagicCookie:
+                self.branch = _VIA_MAGIC_COOKE
             self.branch = str(random.randint(0, 2 ** 60 - 1))  # TODO: ==>Hex
         else:
+            # Here, we'll try increment the (maybe) number after ;branch = z9hG4Bk_<NUMBER>
             try:
-                branch = int(self.branch)
-                branch = branch + 1
-                self.branch = self.branch
+                new_branch = self.branch
+                if new_branch.find(_VIA_MAGIC_COOKE, 0, len(_VIA_MAGIC_COOKE)) != -1:
+                    new_branch = new_branch[len(_VIA_MAGIC_COOKE)+1:]
+                else:
+                    pass
+                    #Not a magic-Cooke, just a number?
+                new_branch = int(new_branch)
+                new_branch = new_branch + 1
+                if addMagicCookie:
+                    self.branch = _VIA_MAGIC_COOKE
+                    self.branch = self.branch + "_" + str(new_branch)
+                else:
+                    self.branch = str(new_branch)
             except:
+                # We could of course have used isinstance(self.branch, int) but...
                 self.branch = self.branch + "1"
 
     def __str__(self):
@@ -145,13 +236,6 @@ class ViaHeader(Header):
 
         if port is None or port <= 0:
             port = 5060
-
-        if "branch" not in self.parameters.keys():
-            self.branch = _VIA_MAGIC_COOKE + "_" + genRandomIntString(64)
-        else:
-            assert isinstance(self.parameters["branch"], str), ";branch param not supplied as string"
-            self.branch = self.parameters["branch"]
-            self.parameters.pop("branch", None);
 
         # TODO: if self.sent_by["host"] == IPv6 ==> [ipv6 reference]
         return hName + ": " + "SIP/2.0/" + self.protocol.name + " " + host + ":" \
@@ -197,68 +281,65 @@ class NameAddress(Header):
                   HeaderEnum.ROUTE, HeaderEnum.RECROUTE,
                   HeaderEnum.CONTACT,
                   HeaderEnum.REFER_TO,
-                  HeaderEnum.CUSTOM)
+                  HeaderEnum.CUSTOM) # TODO: Not used for validation yet
 
-    def __init__(self, htype: HeaderEnum, uri: str, display_name="", **kwargs):
+    def __init__(self, htype: HeaderEnum, uri: str, display_name=None, **kwargs):
 
         if htype not in NameAddress.valid_list:
             raise GenericSipError
 
+        # We're assuming that "incoming" uri does NOT contain "<>"
+        # TODO: Search for, and escape weird chars...
         values = {}
-        values["uri"] = uri
+        values["uri"] = addSipToUri(uri)            # Add sip: if needed
         values["display_name"] = display_name
         super().__init__(htype=htype, hvalues=values, **kwargs)
 
     def __str__(self) -> str:
         hName = self.htype.value
         hValue = ""
-        if len(self.values["display_name"]) == 0:
-            display_name = None
-        else:
+        if self.values["display_name"] is not None:
             # TODO: ONLY If display_name contains SPACE or "," add ""
-            hValue = '"' + self.values["display_name"] + '"' + " "
-
-        # TODO: We're assuming that "incoming" uri does NOT contain "<>"
-        if not self.values["uri"].find("sip:", 0, 4):
-            uri = "sip:" + self.values["uri"]
-        else:
-            uri = self.values["uri"]
-        # TODO: Search for, and escape weird chars...
+            if self.values["display_name"].find(" ") > 0:
+                hValue = '"' + self.values["display_name"] + '"' + " "
+            else:
+                hValue = self.values["display_name"] + " "
 
         if len(self.parameters.keys()) > 0:
-            uri = "<" + uri + ">"
-
-        hValue = hValue + uri
-        return hName + ": " + hValue + self.stringifyParameters()
+            return hName + ": " + hValue + "<" + self.values["uri"] +">" + self.stringifyParameters()
+        else:
+            return hName + ": " + hValue + self.values["uri"] + self.stringifyParameters()
 
     def setUri(self, uri: str):
-        self.values["uri"] = uri
+        self.values["uri"] = addSipToUri(uri)
 
 
-class HeaderList:  # Not reallyu a list...
+
+class HeaderList:  # Not really a >> [list()] <<
 
     def __init__(self):
         self.headerList = dict()
 
-    # TODO: Which headers are allowed multiple times?
 
-    # headerList["Route"] = [Route-Uri1, Route-Uri2]
-    # TODO: https://docs.python.org/2/library/collections.html#collections.defaultdict
-    def add(self, header: Header, addToTop=True):
+    def add(self, header: Header, addToTop=True) -> bool:
         # TODO: Storing headers in dict/hash is maybe not so good, since it will change the order relative to how
-        # they were added? It wont change inter-(same)-header order, so it shouldnt FAIL, but it still might feel
-        # weird?
+        #       they were added. It wont change inter-(same)-header order, so it wont FAIL, but it might feel weird?
         htype = header.htype
-        #print("Checking key: ", type(htype))
+        #print("Adding key: ", htype.name)
         if htype not in self.headerList.keys():
             # print("Adding: ", str(header))
             self.headerList[htype] = [header]
         else:
+            if header.htype in _SINGLE_USE_HEADERS:
+                # raise HeaderOnlyAllowedOnce
+                return False
             if addToTop:
-                self.headerList[htype].append(header)
+                # TODO Use the end as TOP of message, and then .reverse() during stringification?
+                #      Since .insert is quite costly...
+                self.headerList[htype].insert(0, header)
             else:
-                self.headerList[htype].insert(len(self.headerList[htype]), header)
-            # print("Additional: ", len(self.headerList[htype]))
+                self.headerList[htype].append(header)
+        return True
 
     def __str__(self) -> str:
         mHeaders = ""
@@ -268,28 +349,65 @@ class HeaderList:  # Not reallyu a list...
                 mHeaders = mHeaders + "\r\n"
         return mHeaders
 
+    def __iter__(self):
+        return HeaderIterator(self)
+
     def hasHeader(self, hType: HeaderEnum) -> int:
         if hType in self.headerList.keys():
             return len(self.headerList[hType])
         else:
             return 0
 
+class HeaderIterator: # TODO: Filter for iterator?
+
+    def __init__(self, hlist : HeaderList):
+        self._headers = hlist
+        self._index = 0
+        self.all_headers = []
+        self.maxCount = 0
+        for key in self._headers.headerList.keys():
+            # Actual headers are stored in a list as the headerList["type"] = [top, ..., bottom]
+            for h in self._headers.headerList[key]:
+                self.all_headers.append(h)
+                self.maxCount += 1
+
+    def getHeaderCount(self) -> int:
+        count = 0
+        for key in self._headers.headerList.keys():
+            # Actual headers are stored in a list as the headerList["type"] = [top, ..., bottom]
+            for h in self._headers.headerList[key]:
+                count += 1
+        return count
+        #hlist = [[hh] for hh in self.headers if hh == htype or True]
+
+    def __next__(self):
+        if self._index >= self.maxCount:
+            raise StopIteration
+        else:
+            self._index +=1
+            return self.all_headers[self._index-1]
+
+
 
 def populateMostMandatoryHeaders(headers: HeaderList):
 
-    cseq = CseqHeader(MethodEnum.INVITE, 5)
-    subject = SimpleHeader(HeaderEnum.SUBJECT, "Subject-2")
+    cseq = CseqHeader(MethodEnum.INVITE, 5, order="1")
+    subject = SimpleHeader(HeaderEnum.SUBJECT, "Subject-2", order="2")
     call_id = SimpleHeader(HeaderEnum.CALL_ID, genRandomIntString() + "@IP_Domain")
-    maxForwards = SimpleHeader(HeaderEnum.MAX_FWD, "70")
-    viaH = ViaHeader(PROTOCOL.UDP, branch="sdjadjaskhh")
-    userAgent = CustomHeader(hname="User-Agent", value="Sping/0.0.0.0.0.1")
+    viaTop = ViaHeader(PROTOCOL.UDP, branch="1231243123", order="4")
+    userAgent = CustomHeader(hname="User-Agent", value="Sping/0.0.0.0.0.1", order="5")
+    maxForwards = SimpleHeader(HeaderEnum.MAX_FWD, "70", order="6")
+    viaBottom = ViaHeader(PROTOCOL.UDP, order="7")
+    viaBottom.setSentBy("1.1.1.1", 6050)
+
 
     headers.add(cseq)
     headers.add(subject)
     headers.add(call_id)
-    headers.add(viaH)
+    headers.add(viaTop)
     headers.add(userAgent)
     headers.add(maxForwards)
+    headers.add(viaBottom, False)
     pass
 
 if __name__ == "__main__":

@@ -5,6 +5,8 @@ class GenericSipError(Exception):
 class InvalidHeader(GenericSipError):
     pass
 
+class HeaderOnlyAllowedOnce(GenericSipError):
+    pass
 
 class ParameterExists(GenericSipError):
     pass

@@ -2,13 +2,22 @@
 
 from qsip.ua import QSipUa
 from qsip.common import *
+#import Thread import Timer
+from threading import Timer
+import time
+
+def printaHello(aa, bb, *args, **kwargs):
+    print("Current time2: ", time.time())
+    print(f"Hello: a:[{type(aa)}], and b:[{type(bb)}]",
+          "A1:", args, "A2:", kwargs)
+
 
 if __name__ == "__main__":
     method = "InVite"
-    q = QSipUa()
-    q.sendMessage(request_uri="sip:taisto@nisse.se", next_hop={"addr":"10.9.24.1", "port":5060},
-                  msg_from={"uri": "kenneth@ip-s.se"}, msg_to={"uri": "taisto@ip-s.se"},
-                  msg_body="hejsan")
-    #q.testStuff()
+    q = QSipUa()    # TODO: Param: StateLess || TransactionStateful ?
+    # q.sendMessageRequest(request_uri="taisto@nisse.se", next_hop={"addr": "10.9.24.1", "port":5060},
+    #                      msg_from={"uri": "sip:kenneth@ip-s.se", "display_name": "Kenneth Den Store"},  # Cant add custom from-tag.
+    #                      msg_to={"uri": "taisto@ip-s.se", "display_name": "TaistoQvist"},
+    #                      msg_body="hejsan")
+    q.testStuff()
     #m = [mm for mm in  if mm == method]
-    print(method)

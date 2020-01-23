@@ -25,10 +25,19 @@ def calc_digest_response(self,
     HA2 = hashlib.md5()
     HA2.update(pre_HA2.encode())
     nc = nonce_counter  ### TODO: Support nonce-reuse?
-    list = (HA1.hexdigest(), nonce, nc, client_nonce, "auth", HA2.hexdigest())
-    print("List is: ", list)
-    preRsp = ":".join(list)
+    mlist = (HA1.hexdigest(), nonce, nc, client_nonce, "auth", HA2.hexdigest())
+    print("List is: ", mlist)
+    preRsp = ":".join(mlist)
     response = hashlib.md5()
     response.update(preRsp.encode())
     return response.hexdigest()
 
+
+def addSipToUri(uri: str) -> str:
+    nuri = "sip:" + uri if uri.find("sip:", 0, 4) < 0 else uri
+    return nuri
+
+    if uri.find("sip:", 0, 4) < 0:
+        return "sip:" + uri
+    else:
+        return uri
