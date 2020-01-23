@@ -1,26 +1,10 @@
 import hashlib
-from qsip.header import *
+import random
+#from qsip.header import *
 
 
-def createRandomString(size=31):
+def genRandomIntString(size=31) ->  str:
     return str(random.randint(0, 2 ** size - 1))
-
-def populateMostMandatoryHeaders(headers : HeaderList):
-
-    cseq = CseqHeader(MethodEnum.INVITE, 5)
-    subject = SimpleHeader(HeaderEnum.SUBJECT, "Subject-2")
-    call_id = SimpleHeader(HeaderEnum.CALL_ID, createRandomString() + "@IP_Domain")
-    maxForwards = SimpleHeader(HeaderEnum.MAX_FWD, "70")
-    viaH = ViaHeader(PROTOCOL.UDP) # TODO: ;branch as parameter
-    userAgent = CustomHeader(hname="User-Agent", value="Sping/0.0.0.0.0.1")
-
-    headers.add(cseq)
-    headers.add(subject)
-    headers.add(call_id)
-    headers.add(viaH)
-    headers.add(userAgent)
-    headers.add(maxForwards)
-    pass
 
 def calc_digest_response(self,
                          username: str,

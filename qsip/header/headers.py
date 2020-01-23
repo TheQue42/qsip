@@ -1,7 +1,8 @@
+import random
 from enum import Enum
 from qsip.common.enums import *
 from qsip.common.exceptions import *
-import random
+from qsip.common.utils import *
 
 
 class HeaderEnum(Enum):
@@ -40,7 +41,7 @@ class HeaderEnum(Enum):
         return super().__hash__()
 
 
-__VIA_MAGIC_COOKE = "z9hG4Bk"
+_VIA_MAGIC_COOKE: str = "z9hG4Bk"
 
 
 ### TODO: Define multiHeader, or SingleHeader to indicate maxNrOfCount.
@@ -107,7 +108,7 @@ class CseqHeader(Header):
 
 class ViaHeader(Header):
     
-    def __init__(self, proto: PROTOCOL, host=None, port=0, branch=None, **kwargs):  # TODO: Via;branch is parameter!
+    def __init__(self, proto: PROTOCOL, host=None, port=0, **kwargs):  # TODO: Via;branch is parameter!
         self.protocol = proto
         assert self.protocol == PROTOCOL.UDP, "Only UDP supported"
         values = {}
@@ -115,10 +116,6 @@ class ViaHeader(Header):
         values["sent_by"]["host"] = host
         values["sent_by"]["port"] = port
         values["prefix"] = "SIP/2.0/" + self.protocol.name
-        if branch is None:
-            self.branch = str(random.randint(0, 2 ** 60 - 1))  # TODO: ==>Hex
-        else:
-            self.branch = branch
         super().__init__(htype=HeaderEnum.VIA, hvalues=values, **kwargs)
 
     def setSentBy(self, host: str, port: int):
@@ -126,25 +123,39 @@ class ViaHeader(Header):
         self.values["sent_by"]["port"] = port
         print("Setting: ", self.values)
 
-    def genBranch(self, incremental: False):
+    def randomizeBranch(self, incremental: False):
         if not incremental:
             self.branch = str(random.randint(0, 2 ** 60 - 1))  # TODO: ==>Hex
         else:
-            self.branch = self.branch + "1"
+            try:
+                branch = int(self.branch)
+                branch = branch + 1
+                self.branch = self.branch
+            except:
+                self.branch = self.branch + "1"
 
     def __str__(self):
         hName = self.htype.value
-        # Via: SIP/2.0/UDP __VIA_HOST__;rport;branch=z9hG4bK__VIA_BRANCH__\r
+
         assert self.values["sent_by"]["host"] is not None \
                and self.values["sent_by"]["port"] is not None, "You need to set IP Info"
 
         host = self.values["sent_by"]["host"]
         port = self.values["sent_by"]["port"]
-        #print(f"Host: {host} and Port: {port}", "Values:", self.values)
+
         if port is None or port <= 0:
             port = 5060
+
+        if "branch" not in self.parameters.keys():
+            self.branch = _VIA_MAGIC_COOKE + "_" + genRandomIntString(64)
+        else:
+            assert isinstance(self.parameters["branch"], str), ";branch param not supplied as string"
+            self.branch = self.parameters["branch"]
+            self.parameters.pop("branch", None);
+
         # TODO: if self.sent_by["host"] == IPv6 ==> [ipv6 reference]
-        return hName + ": " + "SIP/2.0/" + self.protocol.name + " " + host + ":" + str(port) + ";branch=" + self.branch
+        return hName + ": " + "SIP/2.0/" + self.protocol.name + " " + host + ":" \
+               + str(port) + ";branch=" + self.branch + self.stringifyParameters()
 
         # TODO: Via;branch is parameter!
 
@@ -264,5 +275,23 @@ class HeaderList:  # Not reallyu a list...
             return 0
 
 
+def populateMostMandatoryHeaders(headers: HeaderList):
+
+    cseq = CseqHeader(MethodEnum.INVITE, 5)
+    subject = SimpleHeader(HeaderEnum.SUBJECT, "Subject-2")
+    call_id = SimpleHeader(HeaderEnum.CALL_ID, genRandomIntString() + "@IP_Domain")
+    maxForwards = SimpleHeader(HeaderEnum.MAX_FWD, "70")
+    viaH = ViaHeader(PROTOCOL.UDP, branch="sdjadjaskhh")
+    userAgent = CustomHeader(hname="User-Agent", value="Sping/0.0.0.0.0.1")
+
+    headers.add(cseq)
+    headers.add(subject)
+    headers.add(call_id)
+    headers.add(viaH)
+    headers.add(userAgent)
+    headers.add(maxForwards)
+    pass
+
 if __name__ == "__main__":
     print("__file__", __file__, "name: ", __name__, ", vars: ", vars())
+
