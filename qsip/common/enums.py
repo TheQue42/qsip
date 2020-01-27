@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class PROTOCOL(Enum):
     TCP = 0  # SO_STREAM??
     UDP = 1
@@ -12,16 +13,24 @@ class PROTOCOL(Enum):
             if isinstance(other, str):
                 return self.name.lower() == other.lower()
             else:
-                #print("Type is, ", type(other), "is:", other)
-                #assert False, "Can only compare with str(ings) or correct-type ENUMs"
+                # print("Type is, ", type(other), "is:", other)
+                # assert False, "Can only compare with str(ings) or correct-type ENUMs"
                 return False
+
     def __hash__(self) -> int:
         return super().__hash__()
 
+    @classmethod
+    def fromStr(cls, proto: str):
+        if proto.upper() == "UDP":
+            return PROTOCOL.UDP
+        else:
+            return PROTOCOL.TCP
+
 
 class IP_VERSION(Enum):
-    V6 = 0  #AF_INET6?
-    V4 = 1  #AF_INET?
+    V6 = 0  # AF_INET6?
+    V4 = 1  # AF_INET?
 
 
 class MethodEnum(Enum):
@@ -41,7 +50,7 @@ class MethodEnum(Enum):
         if isinstance(other, MethodEnum):
             return self.value == other.value
         else:
-            #print("Comparing:", self.value, "With:", other, self.name.lower() == other.lower())
+            # print("Comparing:", self.value, "With:", other, self.name.lower() == other.lower())
             if isinstance(other, str):
                 return self.name.lower() == other.lower()
             else:
@@ -55,9 +64,10 @@ class MethodEnum(Enum):
 
     # ::is? ::convert? ::fromStr?
     def get(name: str):
-        #print("Will search for", name)
+        # print("Will search for", name)
         m = [meth for meth in list(MethodEnum) if meth == name]
         return m[0]
+
 
 def getMethod(name: str):
     m = [mm for mm in list(MethodEnum) if mm == name]

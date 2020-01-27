@@ -6,14 +6,7 @@ from qsip.common.utils import *
 import re
 
 from collections import namedtuple
-from typing import NamedTuple, Union
-
-
-class NextHop(NamedTuple):
-    addr: str
-    port: int
-    proto: PROTOCOL = PROTOCOL.UDP
-
+from typing import NamedTuple, Union, NewType
 
 _IpSrc = NamedTuple("IpSrc", [("addr", str),
                               ("port", int),
@@ -22,22 +15,32 @@ _IpSrc = NamedTuple("IpSrc", [("addr", str),
 
 class IpInfo(_IpSrc):
     def __new__(cls, addr, port, proto=PROTOCOL.UDP):
-        #        print("Addr:", addr, "port:", port, "proto: ", proto)
         if isinstance(proto, str):
-            p = PROTOCOL.UDP  # TODO: Match
+            p = PROTOCOL.fromStr(proto)
         else:
             p = proto
         return super(IpInfo, cls).__new__(cls, addr, port, p)
 
-    def __init(self, addr, port, proto):
-        
-# TODO: Use alias
+    # It feels somewhat weird to NOT define __init_ here,
+    # I wanted to do the proto/string=>Enum there, but the call to super() fails...
+    # def __init__(self, addr, port, proto):
+    #     print("Addr:", addr, "port:", port, "proto: ", proto)
+    #     if isinstance(proto, str):
+    #         p = PROTOCOL.fromStr(proto)
+    #     else:
+    #         p = proto
+    #     return super(IpInfo, self).__init__(self) (This calls Object.__init__() which doesnt want any params.
+
+
+# TODO: Use typing.NewType instead of subclass.
 class IpSrc(IpInfo):
     pass
 
 class IpDst(IpInfo):
     pass
 
+class NextHop(IpInfo):
+    pass
 
 class SipHost:
 

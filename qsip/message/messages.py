@@ -95,7 +95,7 @@ class Request(Msg):
         :type method: str or MethodEnum
         """
         self._method = MethodEnum.get(method)
-        self._request_uri = createUriFromString(request_uri)
+        self._request_uri = SipUri.createFromString(request_uri)
         self._headers = HeaderList()
 
         # TODO: Search for, and escape weird chars...

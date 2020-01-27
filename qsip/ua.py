@@ -18,27 +18,26 @@ class QSipTransport:
         self._ports[PROTOCOL.UDP] = []
         self._ports[PROTOCOL.TCP] = []
         for p in localSources:
+            print("Adding:", p)
             self._ports[p.proto].append(p)
 
         self._socketStorage[PROTOCOL.UDP] = {}
         self._socketStorage[PROTOCOL.TCP] = {}
-        self._localUdp = self._ports[PROTOCOL.UDP]
-        self._localTcp = self._ports[PROTOCOL.TCP]
+        self._localUdp = self._ports[PROTOCOL.UDP][0]
+        self._localTcp = self._ports[PROTOCOL.TCP][0]
 
     def get_connected_socket(self, dstInfo: IpDst) -> socket:
 
-        src_addr = self._localUdp.addr
-        src_port = self._localUdp.port
         print("Param IS:", type(dstInfo), dstInfo, "ISTRUE:", dstInfo.proto == PROTOCOL.UDP)
         if dstInfo.proto == PROTOCOL.UDP:
-            if dstInfo.addr not in self._socketStorage[proto].keys():
-                mysocket = create_socket(proto, IP_VERSION.V4)
+            if dstInfo.addr not in self._socketStorage[dstInfo.proto].keys():
+                mysocket = create_socket(dstInfo.proto, IP_VERSION.V4)
 
-                if bind_socket(mysocket, bindAddress=src_addr, bindPort=src_port):
+                if bind_socket(mysocket, bindAddress=self._localUdp.addr, bindPort=self._localUdp.port):
                     # We need to connect, to get local Ip:port
                     local_address, local_port = connect_socket(mysocket, dstInfo.addr, dstInfo.port)
                     if local_port > 0:
-                        self._socketStorage[proto][dst_addr] = (mysocket, local_address, local_port)
+                        self._socketStorage[dstInfo.proto][dstInfo.addr] = (mysocket, local_address, local_port)
                         return mysocket, local_address, local_port
                     else:
                         # Error connecting socket
@@ -69,8 +68,8 @@ class QSipUa:
         # TODO: PreCreate Route-header.
         if outgoingProxyUri is not None:
             self._outgoingProxyInfo = SipUri.createFromString(outgoingProxyUri)
-        print("IN1", localUdpInfo, type(localTcpInfo))
-        print("IN2", localTcpInfo, type(localTcpInfo))
+        #print("IN1", localUdpInfo, type(localTcpInfo))
+        #print("IN2", localTcpInfo, type(localTcpInfo))
         assert isinstance(localUdpInfo, IpSrc) and isinstance(localTcpInfo, IpSrc),\
             "Local IP cfg NOT supplied as dict{addr/port}"
         ## TODO  Validate Dict entry.
@@ -106,8 +105,7 @@ class QSipUa:
         bytesToSend = str(msg).encode()
         # TODO: Check socket is valid? getpeername, getsockname?
 
-
-        result = sock.sendto(bytesToSend, (next_hop["addr"], next_hop["port"]))
+        result = sock.sendto(bytesToSend, (next_hop.addr, next_hop.port))
 
         if result != len(bytesToSend):
             sock.close()
