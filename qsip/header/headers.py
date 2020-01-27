@@ -70,7 +70,7 @@ def createUriFromHost(host: SipHost) -> SipUri:
 def createUriFromString(uri_string: str) -> SipUri:
     # TODO: Lots of clever parsing
     # Strip whitespace?? TODO: strip <>
-    uri_string = "sip:taisto@ip-s.se:4444 ; ; param=1; param=23131"
+    #uri_string = "sip:taisto@ip-s.se:4444 ; ; param1=JoahssånX; param2=23131 kalle"
     uri = ""
     print(f"Incoming:[{uri_string}]")
     if uri_string.find("sip", 0, 4) == 0:
@@ -85,26 +85,38 @@ def createUriFromString(uri_string: str) -> SipUri:
         assert hasColon > 0, "Invalid URI hostname!"
         host = uri[0:hasColon]
         port = uri[hasColon+1:]
-        pmatch = re.match("([0-9]+)\s+(.*)", port)
+        pmatch = re.match("(\d+)\s*(.*)", port)
         assert pmatch.group(1) and int(pmatch.group(1)) > 0, "Invalid URI with ':' but no or invalid port number"
         port = pmatch.group(1)
         uri = pmatch.group(2)
     else:
         port = 0
-    uri = re.sub(" +", "", uri)  # Strip whitespace
+    uri = re.sub(" +;", ";", uri)  # Strip whitespace
+    uri = re.sub("; +", ";", uri)  # Strip whitespace
     #uri = re.sub(";+", ";", uri)  # Strip whitespace
-    params=dict()
+
+    # Lets extract any parameters
+    params = dict()
+    print(f"Starting with uri: [{uri}]")
     while len(uri) > 0:
-        pmatch = re.search("(;[a-zA-Z0-9=]+)(.*)", uri)
+        # TODO: Update Regexp to match TOKEN-def. This wont handle ;p="kalle petter"
+        #       and CERTAINLY doesnt support the ims-bug with multiple identical charging-params,
+        #       and the \w allows åäö in param-name+value which is doubtful.
+        # TODO: MUST be updated to support "q=1.0"...
+        print("Next:", uri)
+        pmatch = re.search("(;[\w=]+)(.*)", uri)
         if not pmatch:
             break
         else:
-            print("F", pmatch.group(1))
-            spplit
-            param[]
+            p = pmatch.group(1)
+            print("Split: ", p)
+            key, value = p[1:].split("=",)
+            if key in params.keys():
+                print("Warning: identical parameters in header!") # TODO: Use proper LOGGING/WARNING call.
+            params[key] = value
             uri = pmatch.group(2)
 
-    print(f"uri:[{uri}]", "host:", host, "user:", user, "port", port)
+    print(f"Lefturi:[{uri}]", "host:", host, "user:", user, "port", port, params)
     return SipUri(user=user, addr=host, port=port)
 
     pass

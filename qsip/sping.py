@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #import time
 
 from qsip.ua import QSipUa
@@ -21,6 +23,7 @@ if __name__ == "__main__":
     #                      msg_to={"uri": "taisto@ip-s.se", "display_name": "TaistoQvist"},
     #                      msg_body="hejsan")
     #q.testStuff()
-    createUriFromString("sip:taisto@ip-s.se:5006")
+    uri = createUriFromString("sip:taisto@ip-s.se:5006")
+    print(f"Uri-parsed: {uri}")
 
 #m = [mm for mm in  if mm == method]
