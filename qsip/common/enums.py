@@ -5,10 +5,24 @@ class PROTOCOL(Enum):
     UDP = 1
     SCTP = 2
 
+    def __eq__(self, other):
+        if isinstance(other, PROTOCOL):
+            return self.value == other.value
+        else:
+            if isinstance(other, str):
+                return self.name.lower() == other.lower()
+            else:
+                #print("Type is, ", type(other), "is:", other)
+                #assert False, "Can only compare with str(ings) or correct-type ENUMs"
+                return False
+    def __hash__(self) -> int:
+        return super().__hash__()
+
 
 class IP_VERSION(Enum):
     V6 = 0  #AF_INET6?
     V4 = 1  #AF_INET?
+
 
 class MethodEnum(Enum):
     INVITE = "INVITE"

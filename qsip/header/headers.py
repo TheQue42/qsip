@@ -5,14 +5,48 @@ from qsip.common.exceptions import *
 from qsip.common.utils import *
 import re
 
+from collections import namedtuple
+from typing import NamedTuple, Union
+
+
+class NextHop(NamedTuple):
+    addr: str
+    port: int
+    proto: PROTOCOL = PROTOCOL.UDP
+
+
+_IpSrc = NamedTuple("IpSrc", [("addr", str),
+                              ("port", int),
+                              ("proto", PROTOCOL)])
+
+
+class IpInfo(_IpSrc):
+    def __new__(cls, addr, port, proto=PROTOCOL.UDP):
+        #        print("Addr:", addr, "port:", port, "proto: ", proto)
+        if isinstance(proto, str):
+            p = PROTOCOL.UDP  # TODO: Match
+        else:
+            p = proto
+        return super(IpInfo, cls).__new__(cls, addr, port, p)
+
+    def __init(self, addr, port, proto):
+        
+# TODO: Use alias
+class IpSrc(IpInfo):
+    pass
+
+class IpDst(IpInfo):
+    pass
+
+
 class SipHost:
 
-    def isFqdn(self, addr : str ):
+    def isFqdn(self, addr: str):
         return False
 
     def __init__(self, addr: str, port=0):
         assert len(addr) > 0, "Zero length address/host"
-        if self.isFqdn(addr):       # TODO FqDN logic NOT defined
+        if self.isFqdn(addr):  # TODO FqDN logic NOT defined
             self._fqdn = addr
             self.addr = None
             self._resolved = False
@@ -64,63 +98,79 @@ class SipUri:
         else:
             return "sip:" + self.user + "@" + str(self.host) + str(self.uri_params)
 
-def createUriFromHost(host: SipHost) -> SipUri:
-    return SipUri(user="", addr=host.addr, port=host.port)
-
-def createUriFromString(uri_string: str) -> SipUri:
-    # TODO: Lots of clever parsing
-    # Strip whitespace?? TODO: strip <>
-    #uri_string = "sip:taisto@ip-s.se:4444 ; ; param1=JoahssånX; param2=23131 kalle"
-    uri = ""
-    print(f"Incoming:[{uri_string}]")
-    if uri_string.find("sip", 0, 4) == 0:
-        uri = uri_string[4:]
-    hasAtSign = uri.find("@")
-    if hasAtSign >= 0:
-        assert hasAtSign > 0, "Invalid URI without <<User>>@ in front of @"
-        user = uri[0:hasAtSign]
-        uri = uri[hasAtSign+1:]
-    hasColon = uri.find(":")
-    if hasColon >= 0:
-        assert hasColon > 0, "Invalid URI hostname!"
-        host = uri[0:hasColon]
-        port = uri[hasColon+1:]
-        pmatch = re.match("(\d+)\s*(.*)", port)
-        assert pmatch.group(1) and int(pmatch.group(1)) > 0, "Invalid URI with ':' but no or invalid port number"
-        port = pmatch.group(1)
-        uri = pmatch.group(2)
-    else:
-        port = 0
-    uri = re.sub(" +;", ";", uri)  # Strip whitespace
-    uri = re.sub("; +", ";", uri)  # Strip whitespace
-    #uri = re.sub(";+", ";", uri)  # Strip whitespace
-
-    # Lets extract any parameters
-    params = dict()
-    print(f"Starting with uri: [{uri}]")
-    while len(uri) > 0:
-        # TODO: Update Regexp to match TOKEN-def. This wont handle ;p="kalle petter"
-        #       and CERTAINLY doesnt support the ims-bug with multiple identical charging-params,
-        #       and the \w allows åäö in param-name+value which is doubtful.
-        # TODO: MUST be updated to support "q=1.0"...
-        print("Next:", uri)
-        pmatch = re.search("(;[\w=]+)(.*)", uri)
-        if not pmatch:
-            break
+    def __radd__(self, other):
+        if isinstance(other, str):
+            return other + str(self)
         else:
-            p = pmatch.group(1)
-            print("Split: ", p)
-            key, value = p[1:].split("=",)
-            if key in params.keys():
-                print("Warning: identical parameters in header!") # TODO: Use proper LOGGING/WARNING call.
-            params[key] = value
+            raise TypeError
+
+    def __add__(self, other):
+        if isinstance(other, str):
+            return str(self) + other
+        else:
+            raise TypeError
+
+    @classmethod
+    def createUriFromHost(cls, host: SipHost):
+        return cls(user="", addr=host.addr, port=host.port)
+
+    @classmethod
+    def createFromString(cls, uri_string: str):
+        # TODO: Lots of clever parsing
+        # Strip whitespace?? TODO: strip <>
+        # uri_string = "sip:taisto@ip-s.se:4444 ; ; param1=JoahssånX; param2=23131 kalle"
+        uri = ""
+        # print(f"Incoming:[{uri_string}]")
+        if uri_string.find("sip", 0, 4) == 0:
+            uri = uri_string[4:]
+        else:
+            uri = uri_string
+        hasAtSign = uri.find("@")
+        if hasAtSign >= 0:
+            assert hasAtSign > 0, "Invalid URI without <<User>>@ in front of @"
+            user = uri[0:hasAtSign]
+            uri = uri[hasAtSign + 1:]
+        else:
+            user = ""
+        hasColon = uri.find(":")
+        if hasColon >= 0:
+            assert hasColon > 0, "Invalid URI hostname!"
+            host = uri[0:hasColon]
+            port = uri[hasColon + 1:]
+            pmatch = re.match("(\d+)\s*(.*)", port)
+            assert pmatch.group(1) and int(pmatch.group(1)) > 0, "Invalid URI with ':' but no or invalid port number"
+            port = pmatch.group(1)
             uri = pmatch.group(2)
+        else:
+            pmatch = re.search("(^[a-zA-Z0-9.-]+)(.*)", uri)  # Strip whitespace
+            host = pmatch.group(1)
+            uri = pmatch.group(2)
+            port = 0
+        uri = re.sub(" +;", ";", uri)  # Strip whitespace
+        uri = re.sub("; +", ";", uri)  # Strip whitespace
+        # uri = re.sub(";+", ";", uri)  # Strip whitespace
 
-    print(f"Lefturi:[{uri}]", "host:", host, "user:", user, "port", port, params)
-    return SipUri(user=user, addr=host, port=port)
+        # Lets extract any parameters
+        params = dict()
+        # print(f"Param search starting with: [{uri}]")
+        while len(uri) > 0:
+            # TODO: Update Regexp to match TOKEN-def. This wont handle ;p="kalle petter"
+            #       and CERTAINLY doesnt support the ims-bug with multiple identical charging-params,
+            #       and the \w allows åäö in param-name+value which is doubtful.
+            # TODO: MUST be updated to support "q=1.0"...
+            pmatch = re.search("(;[\w=]+)(.*)", uri)
+            if not pmatch:
+                break
+            else:
+                p = pmatch.group(1)
+                key, value = p[1:].split("=", )
+                if key in params.keys():
+                    print("Warning: identical parameters in header!")  # TODO: Use proper LOGGING/WARNING call.
+                params[key] = value
+                uri = pmatch.group(2)
 
-    pass
-
+        # print(f"Lefturi:[{uri}]", "host:", host, "user:", user, "port", port, params) # TODO Log.Log
+        return SipUri(user=user, addr=host, port=port)
 
 
 class HeaderEnum(Enum):
@@ -159,6 +209,7 @@ class HeaderEnum(Enum):
     def __hash__(self) -> int:
         return super().__hash__()
 
+
 _SINGLE_USE_HEADERS = [HeaderEnum.FROM, HeaderEnum.TO, HeaderEnum.CALL_ID, HeaderEnum.CSEQ, HeaderEnum.CONTENT_TYPE]
 
 _VIA_MAGIC_COOKE: str = "z9hG4Bk"
@@ -176,8 +227,8 @@ class Header:
     # GenericHeader: Value ;param1=Abc ;param2=xyz
     def __init__(self, *, htype: HeaderEnum, hvalues: dict(), **kwargs):
         self.htype = htype
-        self.values = hvalues       # copy.deep?
-        self.parameters = kwargs    # Param Names in .keys()
+        self.values = hvalues  # copy.deep?
+        self.parameters = kwargs  # Param Names in .keys()
 
     def addParam(self, name: str, value: str, allow_update=False):
         # TODO Append multiple parameters, allowAppend=False
@@ -227,7 +278,7 @@ class CseqHeader(Header):
 
 
 class ViaHeader(Header):
-    
+
     def __init__(self, proto: PROTOCOL, host=None, port=0, **kwargs):  # TODO: Via;branch is parameter!
         self.protocol = proto
         assert self.protocol == PROTOCOL.UDP, "Only UDP supported"
@@ -261,10 +312,10 @@ class ViaHeader(Header):
             try:
                 new_branch = self.branch
                 if new_branch.find(_VIA_MAGIC_COOKE, 0, len(_VIA_MAGIC_COOKE)) != -1:
-                    new_branch = new_branch[len(_VIA_MAGIC_COOKE)+1:]
+                    new_branch = new_branch[len(_VIA_MAGIC_COOKE) + 1:]
                 else:
                     pass
-                    #Not a magic-Cooke, just a number?
+                    # Not a magic-Cooke, just a number?
                 new_branch = int(new_branch)
                 new_branch = new_branch + 1
                 if addMagicCookie:
@@ -332,7 +383,7 @@ class NameAddress(Header):
                   HeaderEnum.ROUTE, HeaderEnum.RECROUTE,
                   HeaderEnum.CONTACT,
                   HeaderEnum.REFER_TO,
-                  HeaderEnum.CUSTOM) # TODO: Not used for validation yet
+                  HeaderEnum.CUSTOM)  # TODO: Not used for validation yet
 
     def __init__(self, htype: HeaderEnum, uri: str, display_name=None, **kwargs):
 
@@ -342,7 +393,7 @@ class NameAddress(Header):
         # We're assuming that "incoming" uri does NOT contain "<>"
         # TODO: Search for, and escape weird chars...
         values = {}
-        values["uri"] = addSipToUri(uri)            # Add sip: if needed
+        values["uri"] = addSipToUri(uri)  # Add sip: if needed
         values["display_name"] = display_name
         super().__init__(htype=htype, hvalues=values, **kwargs)
 
@@ -357,7 +408,7 @@ class NameAddress(Header):
                 hValue = self.values["display_name"] + " "
 
         if len(self.parameters.keys()) > 0:
-            return hName + ": " + hValue + "<" + self.values["uri"] +">" + self.stringifyParameters()
+            return hName + ": " + hValue + "<" + self.values["uri"] + ">" + self.stringifyParameters()
         else:
             return hName + ": " + hValue + self.values["uri"] + self.stringifyParameters()
 
@@ -365,21 +416,19 @@ class NameAddress(Header):
         self.values["uri"] = addSipToUri(uri)
 
 
-
 class HeaderList:  # Not really a >> [list()] <<
 
     def __init__(self):
-        self.headerList = dict()
-
+        self._headerList = dict()
 
     def add(self, header: Header, addToTop=True) -> bool:
         # TODO: Storing headers in dict/hash is maybe not so good, since it will change the order relative to how
         #       they were added. It wont change inter-(same)-header order, so it wont FAIL, but it might feel weird?
         htype = header.htype
-        #print("Adding key: ", htype.name)
-        if htype not in self.headerList.keys():
+        # print("Adding key: ", htype.name)
+        if htype not in self._headerList.keys():
             # print("Adding: ", str(header))
-            self.headerList[htype] = [header]
+            self._headerList[htype] = [header]
         else:
             if header.htype in _SINGLE_USE_HEADERS:
                 # raise HeaderOnlyAllowedOnce
@@ -387,15 +436,15 @@ class HeaderList:  # Not really a >> [list()] <<
             if addToTop:
                 # TODO Use the end as TOP of message, and then .reverse() during stringification?
                 #      Since .insert is quite costly...
-                self.headerList[htype].insert(0, header)
+                self._headerList[htype].insert(0, header)
             else:
-                self.headerList[htype].append(header)
+                self._headerList[htype].append(header)
         return True
 
     def __str__(self) -> str:
         mHeaders = ""
-        for hType in self.headerList.keys():
-            for hInstance in self.headerList[hType]:
+        for hType in self._headerList.keys():
+            for hInstance in self._headerList[hType]:
                 mHeaders = mHeaders + str(hInstance)
                 mHeaders = mHeaders + "\r\n"
         return mHeaders
@@ -404,44 +453,62 @@ class HeaderList:  # Not really a >> [list()] <<
         return HeaderIterator(self)
 
     def hasHeader(self, hType: HeaderEnum) -> int:
-        if hType in self.headerList.keys():
-            return len(self.headerList[hType])
+        if hType in self._headerList.keys():
+            return len(self._headerList[hType])
         else:
             return 0
 
-class HeaderIterator: # TODO: Filter for iterator?
+    def __setitem__(self, key, value):
+        if key not in list(HeaderEnum):
+            raise InvalidHeader
+        self._headerList[key] = value
 
-    def __init__(self, hlist : HeaderList):
+    def __getitem__(self, key):
+        if key not in list(HeaderEnum):
+            raise InvalidHeader
+        return self._headerList[key]
+
+    def __delitem__(self, key):
+        pass
+
+    def __len__(self):
+        pass
+
+    def __keytransform__(self, key):
+        pass
+
+
+class HeaderIterator:  # TODO: Filter for iterator?
+
+    def __init__(self, hlist: HeaderList):
         self._headers = hlist
         self._index = 0
         self.all_headers = []
         self.maxCount = 0
-        for key in self._headers.headerList.keys():
+        for key in self._headers._headerList.keys():
             # Actual headers are stored in a list as the headerList["type"] = [top, ..., bottom]
-            for h in self._headers.headerList[key]:
+            for h in self._headers._headerList[key]:
                 self.all_headers.append(h)
                 self.maxCount += 1
 
     def getHeaderCount(self) -> int:
         count = 0
-        for key in self._headers.headerList.keys():
+        for key in self._headers._headerList.keys():
             # Actual headers are stored in a list as the headerList["type"] = [top, ..., bottom]
-            for h in self._headers.headerList[key]:
+            for h in self._headers._headerList[key]:
                 count += 1
         return count
-        #hlist = [[hh] for hh in self.headers if hh == htype or True]
+        # hlist = [[hh] for hh in self.headers if hh == htype or True]
 
     def __next__(self):
         if self._index >= self.maxCount:
             raise StopIteration
         else:
-            self._index +=1
-            return self.all_headers[self._index-1]
-
+            self._index += 1
+            return self.all_headers[self._index - 1]
 
 
 def populateMostMandatoryHeaders(headers: HeaderList):
-
     cseq = CseqHeader(MethodEnum.INVITE, 5, order="1")
     subject = SimpleHeader(HeaderEnum.SUBJECT, "Subject-2", order="2")
     call_id = SimpleHeader(HeaderEnum.CALL_ID, genRandomIntString() + "@IP_Domain")
@@ -451,7 +518,6 @@ def populateMostMandatoryHeaders(headers: HeaderList):
     viaBottom = ViaHeader(PROTOCOL.UDP, order="7")
     viaBottom.setSentBy("1.1.1.1", 6050)
 
-
     headers.add(cseq)
     headers.add(subject)
     headers.add(call_id)
@@ -459,8 +525,7 @@ def populateMostMandatoryHeaders(headers: HeaderList):
     headers.add(userAgent)
     headers.add(maxForwards)
     headers.add(viaBottom, False)
-    pass
+
 
 if __name__ == "__main__":
     print("__file__", __file__, "name: ", __name__, ", vars: ", vars())
-
