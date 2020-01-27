@@ -8,12 +8,10 @@ import re
 from collections import namedtuple
 from typing import NamedTuple, Union, NewType
 
-_IpSrc = NamedTuple("IpSrc", [("addr", str),
-                              ("port", int),
-                              ("proto", PROTOCOL)])
+_IpInfo = NamedTuple("_IpInfo", [("addr", str), ("port", int), ("proto", PROTOCOL)])
 
 
-class IpInfo(_IpSrc):
+class IpInfo(_IpInfo):
     def __new__(cls, addr, port, proto=PROTOCOL.UDP):
         if isinstance(proto, str):
             p = PROTOCOL.fromStr(proto)
