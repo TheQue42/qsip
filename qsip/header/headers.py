@@ -3,6 +3,7 @@ from enum import Enum
 from qsip.common.enums import *
 from qsip.common.exceptions import *
 from qsip.common.utils import *
+import re
 
 class SipHost:
 
@@ -68,6 +69,44 @@ def createUriFromHost(host: SipHost) -> SipUri:
 
 def createUriFromString(uri_string: str) -> SipUri:
     # TODO: Lots of clever parsing
+    # Strip whitespace?? TODO: strip <>
+    uri_string = "sip:taisto@ip-s.se:4444 ; ; param=1; param=23131"
+    uri = ""
+    print(f"Incoming:[{uri_string}]")
+    if uri_string.find("sip", 0, 4) == 0:
+        uri = uri_string[4:]
+    hasAtSign = uri.find("@")
+    if hasAtSign >= 0:
+        assert hasAtSign > 0, "Invalid URI without <<User>>@ in front of @"
+        user = uri[0:hasAtSign]
+        uri = uri[hasAtSign+1:]
+    hasColon = uri.find(":")
+    if hasColon >= 0:
+        assert hasColon > 0, "Invalid URI hostname!"
+        host = uri[0:hasColon]
+        port = uri[hasColon+1:]
+        pmatch = re.match("([0-9]+)\s+(.*)", port)
+        assert pmatch.group(1) and int(pmatch.group(1)) > 0, "Invalid URI with ':' but no or invalid port number"
+        port = pmatch.group(1)
+        uri = pmatch.group(2)
+    else:
+        port = 0
+    uri = re.sub(" +", "", uri)  # Strip whitespace
+    #uri = re.sub(";+", ";", uri)  # Strip whitespace
+    params=dict()
+    while len(uri) > 0:
+        pmatch = re.search("(;[a-zA-Z0-9=]+)(.*)", uri)
+        if not pmatch:
+            break
+        else:
+            print("F", pmatch.group(1))
+            spplit
+            param[]
+            uri = pmatch.group(2)
+
+    print(f"uri:[{uri}]", "host:", host, "user:", user, "port", port)
+    return SipUri(user=user, addr=host, port=port)
+
     pass
 
 

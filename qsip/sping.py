@@ -2,6 +2,7 @@
 
 from qsip.ua import QSipUa
 from qsip.common import *
+from qsip.header import createUriFromString
 #import Thread import Timer
 from threading import Timer
 import time
@@ -19,5 +20,7 @@ if __name__ == "__main__":
     #                      msg_from={"uri": "sip:kenneth@ip-s.se", "display_name": "Kenneth Den Store"},  # Cant add custom from-tag.
     #                      msg_to={"uri": "taisto@ip-s.se", "display_name": "TaistoQvist"},
     #                      msg_body="hejsan")
-    q.testStuff()
-    #m = [mm for mm in  if mm == method]
+    #q.testStuff()
+    createUriFromString("sip:taisto@ip-s.se:5006")
+
+#m = [mm for mm in  if mm == method]
