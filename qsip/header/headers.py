@@ -10,6 +10,10 @@ from typing import NamedTuple, Union, NewType
 
 _IpInfo = NamedTuple("_IpInfo", [("addr", str), ("port", int), ("proto", PROTOCOL)])
 
+class TestNameType(NamedTuple):
+    a: str
+    b: str
+    c: int
 
 class IpInfo(_IpInfo):
     def __new__(cls, addr, port, proto=PROTOCOL.UDP):
@@ -19,6 +23,7 @@ class IpInfo(_IpInfo):
             p = proto
         return super(IpInfo, cls).__new__(cls, addr, port, p)
 
+#    __slots__ = ()
     # It feels somewhat weird to NOT define __init_ here,
     # I wanted to do the proto/string=>Enum there, but the call to super() fails...
     # def __init__(self, addr, port, proto):
@@ -32,13 +37,14 @@ class IpInfo(_IpInfo):
 
 # TODO: Use typing.NewType instead of subclass.
 class IpSrc(IpInfo):
-    pass
+    __slots__ = ()
 
 class IpDst(IpInfo):
+    #__slots__ = ()
     pass
 
 class NextHop(IpInfo):
-    pass
+    __slots__ = ()
 
 class SipHost:
 

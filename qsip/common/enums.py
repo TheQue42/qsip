@@ -29,8 +29,8 @@ class PROTOCOL(Enum):
 
 
 class IP_VERSION(Enum):
-    V6 = 0  # AF_INET6?
-    V4 = 1  # AF_INET?
+    V6 = 6  # AF_INET6?
+    V4 = 4  # AF_INET?
 
 
 class MethodEnum(Enum):

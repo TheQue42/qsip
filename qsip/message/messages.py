@@ -46,7 +46,7 @@ class Msg:
             return self._headers
 
 
-    def informSocketSrcInfo(self, address: str, port: int, proto = PROTOCOL.UDP):
+    def setSocketInfo(self, address: str, port: int, proto = PROTOCOL.UDP):
         self.srcIp = address
         self.srcPort = port
         self.protocol = proto
