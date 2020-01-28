@@ -57,3 +57,13 @@ def connect_socket(my_socket : socket, dst_addr : str, dst_port : int):
 
     (localAddr, localPort) = my_socket.getsockname()
     return (localAddr, localPort)
+
+
+def sendOnSocket(msg, sock, next_hop) -> bool:
+    bytesToSend = str(msg).encode()
+    result = sock.sendto(bytesToSend, (next_hop.addr, next_hop.port))
+
+    if result != len(bytesToSend):
+        sock.close()
+        return False
+    return True

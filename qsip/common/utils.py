@@ -3,7 +3,7 @@ import random
 #from qsip.header import *
 
 
-def genRandomIntString(size=31) ->  str:
+def genRandomIntString(size=32) ->  str:
     return str(random.randint(0, 2 ** size - 1))
 
 def calc_digest_response(self,

@@ -11,7 +11,7 @@ from qsip.stack.transport import *
 from qsip.stack.txn import *
 
 
-class QSipUa(TxnUser):
+class QSipUa(TxnUser):  # We dont really need the interface-concept...DuckTyping.
 
     def __init__(self,
                  localUdpInfo: IpSrc,
@@ -25,21 +25,22 @@ class QSipUa(TxnUser):
             self._username = auth_info["username"]
             self._password = auth_info["password"]
 
-        # TODO: PreCreate Route-header.
         if outgoingProxyUri is not None:
             self._outgoingProxyInfo = SipUri.createFromString(outgoingProxyUri)
         # print("IN1", localUdpInfo, type(localTcpInfo))
         # print("IN2", localTcpInfo, type(localTcpInfo))
         assert isinstance(localUdpInfo, IpSrc) and isinstance(localTcpInfo, IpSrc), \
             "Local IP cfg NOT supplied as dict{addr/port}"
-        ## TODO  Validate Dict entry.
+
         self._udpSource = localUdpInfo
         self._tcpSource = localTcpInfo
-        # print("LocalIPInfo set to: ", localUdpInfo, localTcpInfo)
-        assert localTcpInfo.port == 0, "TCP Currently NOT supported"
+
         self._messageQueue = []
         self._tpMgr = QSipTransport(self._udpSource, self._tcpSource)
-        self.txnList = []
+        self.txnList = {}
+
+    def bindToNetwork(self, **kwargs):
+        self._tpMgr.bind(self._udpSource, self._tcpSource)
 
     def addLocalPort(self):
         # We might want to send of lots of ports...need this?
@@ -89,13 +90,13 @@ class QSipUa(TxnUser):
                              request_uri=request_uri,
                              body=req_body)
 
-        if req_from != "INVITE":
-            txn = NonInviteClientTxn(msgRequest, self)
+        if req_method != "INVITE":
+            txn = NonInviteClientTxn(msgRequest, self, timer_t1=0.1)
         else:
             txn = InviteClientTxn(msgRequest, self)
 
-        self.txnList.append(txn)
-        txn.send(self._udpSource, next_hop)
+        self.txnList[txn.id()] = txn
+        txn.sendRequest(self._udpSource, next_hop)
 
     def testStuff(self):
         test = SipUri(user="", addr="10.1.1.2", port=5060, tag=genRandomIntString())
@@ -104,7 +105,13 @@ class QSipUa(TxnUser):
         print(test.uri_params)
 
     def txnFailed(self, txn: Txn, reason: str = ""):
-        print("Transaction Failed", txn.Id(), reason)
-
+        print("QSip_UA: Transaction Failed With", reason, "Id:", txn.id())
+        self.sendRequest(req_method="MESSAGE",
+                         request_uri="taisto@nisse.se", next_hop=NextHop("10.9.24.1", 5060, "UDP"),
+                        req_from={"uri": "sip:kenneth@ip-s.se", "display_name": "Kenneth Den Store"},
+                        # TODO Cant add custom from-tag.
+                        req_to={"uri": "taisto@ip-s.se", "display_name": "TaistoQvist"},
+                        req_body="hejsan")
+        sys.exit()
     def txnTerminate(self, txn: Txn, reason: str = ""):
         print("Transaction Terminated", txn.Id())

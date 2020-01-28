@@ -12,8 +12,6 @@ class Msg:
         """" Base class for SIP Messages """
         self.body = body[:]  # TODO: Needed?
         self._headers = headers
-        populateMostMandatoryHeaders(self._headers)
-        #print(vars(self.headers))
         # TODO: Add content-type and Content-Length
 
     def setFrom(self, *, uri: str, display_name: str) -> None:
@@ -33,14 +31,15 @@ class Msg:
     def addHeader(self, header: Header) -> None:
         self._headers.add(header)
 
+    def getTopHeader(self, htype: HeaderEnum) -> Header:
+        return self.getHeaders(htype)[0]
+
     def getHeaders(self, htype=None) -> HeaderList:
         """Return a new list with only the headers specified"""
 
         if htype is not None:
             assert isinstance(htype, HeaderEnum), "Must be HeaderEnum"
-            hlist = HeaderList()
-            [[hlist.add(hh)] for hh in self._headers if hh.htype == htype]
-            #print("hlist:", hlist )
+            hlist = [hh for hh in self._headers if hh.htype == htype]
             return hlist
         else:
             return self._headers
@@ -89,16 +88,10 @@ class Request(Msg):
                  to_info=None,
                  request_uri=str,
                  body: str):
-        """
 
-        :type headers: HeaderList
-        :type method: str or MethodEnum
-        """
         self._method = MethodEnum.get(method)
         self._request_uri = SipUri.createFromString(request_uri)
         self._headers = HeaderList()
-
-        # TODO: Search for, and escape weird chars...
 
         toH = NameAddress(HeaderEnum.TO, uri=to_info["uri"], display_name=to_info["display_name"])
         fromH = NameAddress(HeaderEnum.FROM, uri=from_info["uri"], display_name=from_info["display_name"])
@@ -106,6 +99,7 @@ class Request(Msg):
         self._headers.add(toH)
 
         # Constructor fills in most (unset) mandatory headers.
+        populateMostMandatoryHeaders(self._headers, self._method)
         super().__init__(body=body, headers=self._headers)
 
 class Response:

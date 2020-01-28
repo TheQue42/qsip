@@ -22,10 +22,9 @@ def ObjDump(obj, prefix=None, all=False):
 
 if __name__ == "__main__":
     method = "InVite"
-    q = QSipUa(IpSrc("", 5060, PROTOCOL.UDP),
-               IpSrc("", 0, "TCP"))
+    q = QSipUa(IpSrc("", 5060, PROTOCOL.UDP), IpSrc("", 6050, "TCP"))
     if 1 == 1:
-        q.sendRequest(req_method="MESSAGE",
+        q.sendRequest(req_method="INVITE",
                       request_uri="taisto@nisse.se", next_hop=NextHop("10.9.24.1", 5060, "UDP"),
                       req_from={"uri": "sip:kenneth@ip-s.se", "display_name": "Kenneth Den Store"},
                       # Cant add custom from-tag.
@@ -34,8 +33,7 @@ if __name__ == "__main__":
 
     p1 = IpSrc("10.1.1.1", 5555)
     p2 = IpDst("10.1.1.1", 5555, "TCP")
-    types = tuple("A B C D E F G H I J K L M".split())
-    print(types)
+    #print(types)
     #p2 = TestNameType(1, 2, 3)
 
-    print(f"P1: {p1}, p2: {p2}, equal: {p1 == p2}", "TypeP1", type(p1), "TypeP2", type(p2))
+    #print(f"P1: {p1}, p2: {p2}, equal: {p1 == p2}", "TypeP1", type(p1), "TypeP2", type(p2))

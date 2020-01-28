@@ -219,7 +219,7 @@ class HeaderEnum(Enum):
 
 _SINGLE_USE_HEADERS = [HeaderEnum.FROM, HeaderEnum.TO, HeaderEnum.CALL_ID, HeaderEnum.CSEQ, HeaderEnum.CONTENT_TYPE]
 
-_VIA_MAGIC_COOKE: str = "z9hG4Bk"
+_VIA_MAGIC_COOKIE: str = "z9hG4Bk"
 
 
 ### TODO: Define multiHeader, or SingleHeader to indicate maxNrOfCount.
@@ -272,7 +272,7 @@ class CseqHeader(Header):
 
     def __init__(self, method: MethodEnum, number=-1, **kwargs):
         if number < 0:
-            number = str(random.randint(0, 2 ** 31 - 1))
+            number = genRandomIntString(24)
         values = {}
         values["method"] = method
         values["number"] = number
@@ -294,16 +294,20 @@ class ViaHeader(Header):
         values["sent_by"]["host"] = host
         values["sent_by"]["port"] = port
         values["prefix"] = "SIP/2.0/" + self.protocol.name
-        if "branch" not in kwargs.keys():
-            self.branch = _VIA_MAGIC_COOKE + "_" + genRandomIntString(64)
-        else:
+        if "branch" in kwargs.keys():
             assert isinstance(kwargs["branch"], str), ";branch param not supplied as string"
             self.branch = kwargs["branch"]
             kwargs.pop("branch", None)
+        else:
+            self.branch = ""
         super().__init__(htype=HeaderEnum.VIA, hvalues=values, **kwargs)
 
     def getBranch(self) -> str:
         return self.branch
+
+    def initBranch(self, randomString: str):
+        self.branch = _VIA_MAGIC_COOKIE
+        self.branch = self.branch + randomString
 
     def setSentBy(self, host: str, port: int):
         self.values["sent_by"]["host"] = host
@@ -312,21 +316,21 @@ class ViaHeader(Header):
     def randomizeBranch(self, incremental: False, addMagicCookie=True):
         if not incremental:
             if addMagicCookie:
-                self.branch = _VIA_MAGIC_COOKE
+                self.branch = _VIA_MAGIC_COOKIE
             self.branch = str(random.randint(0, 2 ** 60 - 1))  # TODO: ==>Hex
         else:
             # Here, we'll try increment the (maybe) number after ;branch = z9hG4Bk_<NUMBER>
             try:
                 new_branch = self.branch
-                if new_branch.find(_VIA_MAGIC_COOKE, 0, len(_VIA_MAGIC_COOKE)) != -1:
-                    new_branch = new_branch[len(_VIA_MAGIC_COOKE) + 1:]
+                if new_branch.find(_VIA_MAGIC_COOKIE, 0, len(_VIA_MAGIC_COOKIE)) != -1:
+                    new_branch = new_branch[len(_VIA_MAGIC_COOKIE) + 1:]
                 else:
                     pass
                     # Not a magic-Cooke, just a number?
                 new_branch = int(new_branch)
                 new_branch = new_branch + 1
                 if addMagicCookie:
-                    self.branch = _VIA_MAGIC_COOKE
+                    self.branch = _VIA_MAGIC_COOKIE
                     self.branch = self.branch + "_" + str(new_branch)
                 else:
                     self.branch = str(new_branch)
@@ -515,14 +519,14 @@ class HeaderIterator:  # TODO: Filter for iterator?
             return self.all_headers[self._index - 1]
 
 
-def populateMostMandatoryHeaders(headers: HeaderList):
-    cseq = CseqHeader(MethodEnum.INVITE, 5, order="1")
+def populateMostMandatoryHeaders(headers: HeaderList, method: MethodEnum):
+    cseq = CseqHeader(method, order="1")
     subject = SimpleHeader(HeaderEnum.SUBJECT, "Subject-2", order="2")
     call_id = SimpleHeader(HeaderEnum.CALL_ID, genRandomIntString() + "@IP_Domain")
-    viaTop = ViaHeader(PROTOCOL.UDP, branch="1231243123", order="4")
+    viaTop = ViaHeader(PROTOCOL.UDP, order="4")
     userAgent = CustomHeader(hname="User-Agent", value="Sping/0.0.0.0.0.1", order="5")
     maxForwards = SimpleHeader(HeaderEnum.MAX_FWD, "70", order="6")
-    viaBottom = ViaHeader(PROTOCOL.UDP, order="7")
+    viaBottom = ViaHeader(PROTOCOL.UDP, order="7", branch="SomeOtherValue")
     viaBottom.setSentBy("1.1.1.1", 6050)
 
     headers.add(cseq)

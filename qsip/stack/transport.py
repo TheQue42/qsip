@@ -6,12 +6,22 @@ from qsip.header import *
 from qsip.common.utils import *
 from qsip.message import *
 
-class QSipTransport:
+class Singleton(type):
+    _instances = {}
+    def __call__(cls, *args, **kwargs):
+        #print("__CALL__", list(cls._instances.keys()), "args", args, "kwargs", kwargs )
+        if cls not in cls._instances.keys():
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+
+        return cls._instances[cls]
+
+class QSipTransport(metaclass=Singleton):
 
     def __init__(self, *localSources, **kwargs):
         # Since we're binding and connecting the socket towards each specific dstAddr, we need to keep track of which is
         # which. Its currently based ONLY on key="addr", but with TCP support, we're gonna have to change that,
         # to include port+protocol TODO: TCP/UDP
+        print("Initializing Singleton Transport Manager", localSources)
         self._socketStorage = dict()
         self._ports = dict()
         self._ports[PROTOCOL.UDP] = []
@@ -22,6 +32,13 @@ class QSipTransport:
 
         self._socketStorage[PROTOCOL.UDP] = {}  # Keyed on DstIp
         self._socketStorage[PROTOCOL.TCP] = {}  # Keyed on DstIp
+
+    def listenOnSocket(self, source : IpSrc = IpSrc("",0, PROTOCOL.UDP) ):
+        pass
+
+    def bind(self, *portList):
+        print("DEBUG", portList)
+        pass
 
     def getUdpSocket(self, destination: IpDst, source: IpSrc = None) -> socket:
 

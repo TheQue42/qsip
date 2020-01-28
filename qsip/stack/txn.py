@@ -30,54 +30,80 @@ Timer J  64*T1 for UDP    Section 17.2.2       Wait time for non-INVITE request 
 Timer K  T4 for UDP       Section 17.1.2.2     Wait time for response retransmits
     """
 
-
-class TimerEntry(NamedTuple):
-    initial: int = 0.5
-    max: int = 32.0
+TIMER_T1 = 0.5
+TIMER_T1_64 = 32.0
+TIMER_C = 180
+TIMER_T4 = 4.0
+TIMER_FAILSAFE_MAX = 64.0
 
 
 class TxnTimer:
 
-    def __init__(self, name: str, start: int, receiver: Txn):
+    def getStartValue(self, timer_name: str, proto: PROTOCOL = PROTOCOL.UDP):
+        value = 0
+        if re.search('timer[_-][AEG]', timer_name, re.IGNORECASE):
+            return self.timer_t1
+        elif re.search("timer[_-][BFH]", timer_name, re.IGNORECASE):
+            return self.timer_t1 * 64
+        elif re.search("timer[_-]C", timer_name, re.IGNORECASE):
+            return TIMER_C
+        elif re.search("timer[_-]D", timer_name, re.IGNORECASE):
+            value = 32.0 if proto == PROTOCOL.UDP else 0
+        elif re.search("(timer[_-])[IK]", timer_name, re.IGNORECASE):
+            value = TIMER_T4 if proto == PROTOCOL.UDP else 0
+        elif re.search("(timer[_-])J", timer_name, re.IGNORECASE):
+            value = self.timer_t1*64 if proto == PROTOCOL.UDP else 0
+        return value
+
+    def __init__(self, timer_name: str, receiver: Txn, **kwargs):
         self.totalTime = 0
-        self.timerValue = TimerEntry(start, 32.0)
-        self.current_value = self.timerValue.start
         self._timer_receiver = receiver
-        self.timer_name = name
-        self.id = genRandomIntString(32)
+        self._timer_name = timer_name  # Timer_A|F, etc
+        self._id = genRandomIntString(32)
+        if "timer_t1" in kwargs.keys():
+            self.timer_t1 = kwargs["timer_t1"]
+        else:
+            self.timer_t1 = TIMER_T1
+        self.current_value = self.getStartValue(self._timer_name)
+        if re.search("timer[_-]E", timer_name, re.IGNORECASE):
+            self.capOff = TIMER_T4
+        else:
+            self.capOff = TIMER_T1_64   # Timer A/E doesnt really have cap off, its stopped by B/F
         self.t = None
 
-    def getT1(self):
-        return 0.5
-
-    def getTimerDefaultValue(self, timer_name: str):
-        return self.timerValues.start  # Based on Name
-
-    def startTimer(self, *args, **kwargs):
+    def startTimer(self, **kwargs):
         assert self.t is None, "Timer already running!"
-        self.t = Timer(self.current_value, self.timerPop, [self.id] + args, **kwargs)
+        if "timeout" in kwargs.keys():
+            self.current_value = kwargs["timeout"]
+        print("Starting timer", self._timer_name, "Initial:", self.current_value)
+        self.t = Timer(self.current_value, self.timerPop, [self._id], kwargs)
         self.t.start()
 
-    def timerPop(self, timer_id: str, *args, **kwargs):
+    def timerPop(self, timer_id: str, **kwargs):
         self.totalTime += self.current_value
-        if self.totalTime >= self.timerValue.max:
-            self._timer_receiver.transactionTimeout(*args, **kwargs)
+        if self.totalTime >= TIMER_FAILSAFE_MAX:
+            self._timer_receiver.timeoutMaxReached(self, timer_id, **kwargs)
         else:
-            self._timer_receiver.timerPop(*args, **kwargs)
-            self.backoff_double(self.current_value)
-            self.restartTimer()
+            self._timer_receiver.timerPop(self, self._timer_name, **kwargs)
 
     def backoff_double(self, timer_name):
-        self.current_value = self.current_value * 2  # TODO: Capoff based on name
+        self.current_value = self.current_value * 2 if self.current_value < self.capOff else self.capOff
 
-    def restartTimer(self):
+    def restartTimer(self, **kwargs):
+        print("Restarting", self._timer_name, self.current_value)
         self.t.cancel()
-        self.t = Timer(self.current_value, self.timerPop, self.id)
+        self.backoff_double(self._timer_name)
+        self.t = Timer(self.current_value, self.timerPop, [self._id], kwargs)
+        self.t.start()
 
     def stop(self):
         if self.t is not None:
+            print("Stopping", self._timer_name, self.__class__)
             self.t.cancel()
             self.t = None
+
+    def id(self) -> str:
+        return self._id
 
 
 class TxnUser:
@@ -85,10 +111,10 @@ class TxnUser:
     def __init__(self):
         pass
 
-    def txnFailed(self, *, txn: Txn, reason: str = ""):
+    def txnFailed(self, *, txn: Txn, reason: str = "", **kwargs):
         assert False, "Should be overridden by UA"
 
-    def txnTerminated(self, txn: Txn, reason: str = ""):
+    def txnTerminated(self, txn: Txn, reason: str = "", **kwargs):
         assert False, "Should be overridden by UA"
 
 
@@ -101,92 +127,93 @@ class Txn:
         self._socket, self._local_addr, self._local_port = (0, 0, 0)
         self._tu = sender
 
-    def Id(self):
+    def id(self):
         return self._id
 
+    def timerPop(self, timer: TxnTimer, timer_name: str, *args, **kwargs):
+        assert False, "Please Override"
+
+    def timeoutMaxReached(self, timer: TxnTimer, timer_name: str, **kwargs):
+        print("Timer:", timer, timer_name)
+        assert False, "Forgotten Timer"
 
 class ClientTxn(Txn):
 
-    def __init__(self, sip_request: Request, sender: TxnUser):
+    def __init__(self, sip_request: Request, sender: TxnUser, **kwargs):
         self._next_hop = ""
         self._request = sip_request
-        super().__init__(sender)
+        self.timer = None
+        self.timerRetransmit = 0
+        self.timerTxnTimeout = 0
+        if "timer_t1" in kwargs.keys():
+            self.timer_t1 = kwargs["timer_t1"]
+            kwargs.pop("timer_t1")
+        else:
+            self.timer_t1 = TIMER_T1
+        super().__init__(sender, **kwargs)
 
-    def restartClientTimer(self):
-        self.restartTimer()
+    def startTxnTimer(self, timer_t1: int, **kwargs):
+        assert False, "MUST be Overridden"
 
-    def restartTimer(self):
-        assert False, "Must be overridden by INVITE and NonINVITE"
+    def sendRequest(self, local, remote):
+        self._local = local
+        self._next_hop = remote
+        self._socket, self._local_addr, self._local_port = self.transportMgr.getUdpSocket(self._next_hop)
 
-    def timerPop(self, which_timer, timerValue: int):
+        if self._local_port == 0 or self._socket is None:
+            print("Failed binding/connecting")
+            self.failClientTxn("Transport Error - Failed acquiring socket")
+            return
+        self._request.setSocketInfo(self._local_addr, self._local_port)
+        self._request.getTopHeader(HeaderEnum.VIA).initBranch(self.id())
+        if sendOnSocket(self._request, self._socket, self._next_hop):
+            self.startTxnTimer(self.timer_t1)   # Uses subclass client txn
+        else:
+            self.failClientTxn("Transport Error")  # TODO: add Reason
+
+    def timerPop(self, timer: TxnTimer, timer_name: str, **kwargs):
 
         # TODO: Check which timer, maxTimer value. Delegate to subclass
-        print("Pop", timerValue, which_timer, "self", self)
-        if timerValue > 16:
-            self.failClientTxn()  # TODO: add Reason
-            return
-
-        if self.sendOnSocket(self._request, self._socket, self._next_hop):
-            self.restartClientTimer()
+        print("Timer Pop", timer_name, timer.current_value)
+        if timer == self.timerRetransmit:
+            if sendOnSocket(self._request, self._socket, self._next_hop):
+                timer.restartTimer(pelle="Hejsan")  # Will auto-double if needed
+            else:
+                self.failClientTxn("Transport Error")  # TODO: add Reason
         else:
-            self.failClientTxn()  # TODO: add Reason
+            assert timer == self.timerTxnTimeout
+            self.timerRetransmit.stop()
+            self.failClientTxn("TxnTimeout")
 
-    def sendOnSocket(self, msg, sock, next_hop) -> bool:
-        # print("======== Sending ============", datetime.datetime.now())
-        print(str(msg))
-        # print("======== Sending ============")
-        bytesToSend = str(msg).encode()
-        # TODO: Check socket is valid? getpeername, getsockname?
-
-        result = sock.sendto(bytesToSend, (next_hop.addr, next_hop.port))
-
-        if result != len(bytesToSend):
-            sock.close()
-            print("Failed Sending Entire messages")
-            return False
-
-        return True
-
-    def failClientTxn(self):
-        self._tu.txnFailed(txn=self, reason="TxnTimeout")
+    def failClientTxn(self, reason: str = "TxnTimeout", **kwargs):
+        self._tu.txnFailed(txn=self, reason=reason, **kwargs)
 
 
 class InviteClientTxn(ClientTxn):
-    def __init__(self, sip_request: Request, sender: TxnUser):
-        super().__init__(sip_request, sender)
+
+    def __init__(self, sip_request: Request, sender: TxnUser, **kwargs):
+        super().__init__(sip_request, sender, **kwargs)
 
     def restartTimer(self):
         pass  # TODO:
 
+    def startTxnTimer(self, timer_t1: int, **kwargs):
+        self.timerRetransmit = TxnTimer("Timer_A", self)
+        self.timerTxnTimeout = TxnTimer("Timer_B", self)
+        self.timerRetransmit.startTimer()
+        self.timerTxnTimeout.startTimer()
+
 
 class NonInviteClientTxn(ClientTxn):
-    def __init__(self, sip_request: Request, sender: TxnUser):
-        # self._local = ""
-        # self._next_hop = ""
-        # self._socket, self._local_addr, self._local_port = (0,0,0)
-        super().__init__(sip_request, sender)
 
-    def restartTimer(self):
-        t = Timer(self.timerValue, self.timerPop,
-                  [111, self.timerValue])  # TODO: Which timer, Values, MaxValues, Aggregated Values
-        self.timerValue = self.timerValue * 2
-        t.start()
+    def __init__(self, sip_request: Request, sender: TxnUser, **kwargs):
+        super().__init__(sip_request, sender, **kwargs)
 
-    def send(self, local, remote):
-        self._local = local
-        self._next_hop = remote
-        self._socket, self._local_addr, self._local_port = self.transportMgr.getUdpSocket(
-            self._next_hop)  # TODO: Use LOCAL
-
-        if self._local_port == 0 or self._socket is None:
-            print("Failed binding/connecting")
-            self.failClientTxn()
-            return
-
-        self._request.setSocketInfo(self._local_addr, self._local_port)
-        self.timer = TxnTimer("Timer_A", 0.5, 32, self)
-        self.timer.startTimer()
-        # initTimer
+    def startTxnTimer(self, timer_t1: int, **kwargs):
+        self.timerRetransmit = TxnTimer("Timer_E", self, timer_t1=timer_t1)
+        self.timerTxnTimeout = TxnTimer("Timer_F", self, timer_t1=timer_t1)
+        self.timerRetransmit.startTimer()
+        self.timerTxnTimeout.startTimer()
 
 
 class ServerTxn:
