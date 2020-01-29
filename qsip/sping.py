@@ -28,7 +28,7 @@ def ObjDump(obj, prefix=None, all=False):
 
 if __name__ == "__main__":
     method = "InVite"
-    q = QSipUa(IpSrc("", 5060, PROTOCOL.UDP), IpSrc("", 6050, "TCP"))
+    q = QSipUa(IpSrc("", 5060, PROTOCOL.UDP), IpSrc("", 6050, "UDP"))
     q.bindToNetwork()
     if 1 == 0:
         q.sendRequest(req_method="INVITE",
