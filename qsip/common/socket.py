@@ -10,18 +10,19 @@ def create_socket(proto : PROTOCOL, ip_version : IP_VERSION) -> socket:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         except socket.error as err:
             _LOGGER.exception("Socket creation failed with error %s" % (err))
-    else:
-        return None ### TQ-TODO: v6, tcp
-
-    print("Socket successfully created: FileNo: ", s.fileno())
 
     if proto == PROTOCOL.TCP:
         try:
-            # TQ-CHECK: Strange undefined symbol SO_REUSEPORT, for python-3.8 on win10?
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-            print("SetSockOpt(SO_REUSEPORT)")
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         except socket.error as err:
-            _LOGGER.exception("setsockOpt(SO_REUSEPORT) error %s" % (err))
+            _LOGGER.exception("Socket creation failed with error %s" % (err))
+
+        # try:
+        #     # TQ-CHECK: Strange undefined symbol SO_REUSEPORT, for python-3.8 on win10?
+        #     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        #     print("SetSockOpt(SO_REUSEPORT)")
+        # except socket.error as err:
+        #     _LOGGER.exception("setsockOpt(SO_REUSEPORT) error %s" % (err))
 
         try:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -29,15 +30,17 @@ def create_socket(proto : PROTOCOL, ip_version : IP_VERSION) -> socket:
         except socket.error as err:
             _LOGGER.exception("setsockOpt(SO_REUSEADDR) error %s" % (err))
 
+    print(f"{proto.name}-Socket successfully created: FileNo: ", s.fileno())
     return s
 
 
 def bind_socket(my_socket: socket, *, bindAddress ="", bindPort = 0) -> bool:
     """"""
+    print("Binding", my_socket)
     try:    ### TODO: Acquire local-IP. Will be 172.x in docker...
         print(f"Trying to bind socket({my_socket.fileno()}) with: [{bindAddress}] and Port: [{bindPort}]")
-        ### TQ-TODO: IpV6 will expect a 4-tuple.
-        my_socket.bind((bindAddress, 0))
+        ### TQ-TODO: IpV6 will expect a 4-tuple. (host, port, flowinfo, scopeid)
+        my_socket.bind((bindAddress, bindPort))
     except socket.error as err:
         print("Socket bind failed with error %s" % (err))
         return False

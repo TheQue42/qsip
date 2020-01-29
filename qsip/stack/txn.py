@@ -11,6 +11,7 @@ from qsip.message import *
 from qsip.stack.transport import *
 from threading import Timer
 
+
 """
 Timer    Value            Section               Meaning
 ----------------------------------------------------------------------
@@ -155,6 +156,10 @@ class ClientTxn(Txn):
     def startTxnTimer(self, timer_t1: int, **kwargs):
         assert False, "MUST be Overridden"
 
+
+    def shouldRetransmit(self, **kwargs):
+        assert False, "MUST be Overridden"
+        
     def sendRequest(self, local, remote):
         self._local = local
         self._next_hop = remote
@@ -173,9 +178,10 @@ class ClientTxn(Txn):
 
     def timerPop(self, timer: TxnTimer, timer_name: str, **kwargs):
 
-        # TODO: Check which timer, maxTimer value. Delegate to subclass
         print("Timer Pop", timer_name, timer.current_value)
-        if timer == self.timerRetransmit:
+        
+        if timer == self.timerRetransmit and self.shouldRetransmit(self):
+        
             if sendOnSocket(self._request, self._socket, self._next_hop):
                 timer.restartTimer(pelle="Hejsan")  # Will auto-double if needed
             else:
@@ -183,7 +189,7 @@ class ClientTxn(Txn):
         else:
             assert timer == self.timerTxnTimeout
             self.timerRetransmit.stop()
-            self.failClientTxn("TxnTimeout")
+            self.failClientTxn("TxnTimeout", **kwargs)
 
     def failClientTxn(self, reason: str = "TxnTimeout", **kwargs):
         self._tu.txnFailed(txn=self, reason=reason, **kwargs)
@@ -197,6 +203,10 @@ class InviteClientTxn(ClientTxn):
     def restartTimer(self):
         pass  # TODO:
 
+    def shouldRetransmit(self, **kwargs):
+        # TODO If ! 1xxReceived
+        return True
+    
     def startTxnTimer(self, timer_t1: int, **kwargs):
         self.timerRetransmit = TxnTimer("Timer_A", self)
         self.timerTxnTimeout = TxnTimer("Timer_B", self)
@@ -209,6 +219,10 @@ class NonInviteClientTxn(ClientTxn):
     def __init__(self, sip_request: Request, sender: TxnUser, **kwargs):
         super().__init__(sip_request, sender, **kwargs)
 
+    def shouldRetransmit(self, **kwargs):
+        return True
+
+    
     def startTxnTimer(self, timer_t1: int, **kwargs):
         self.timerRetransmit = TxnTimer("Timer_E", self, timer_t1=timer_t1)
         self.timerTxnTimeout = TxnTimer("Timer_F", self, timer_t1=timer_t1)

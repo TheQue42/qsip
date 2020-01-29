@@ -36,7 +36,7 @@ class QSipUa(TxnUser):  # We dont really need the interface-concept...DuckTyping
         self._tcpSource = localTcpInfo
 
         self._messageQueue = []
-        self._tpMgr = QSipTransport(self._udpSource, self._tcpSource)
+        self._tpMgr = QSipTransport()
         self.txnList = {}
 
     def bindToNetwork(self, **kwargs):
@@ -106,6 +106,7 @@ class QSipUa(TxnUser):  # We dont really need the interface-concept...DuckTyping
 
     def txnFailed(self, txn: Txn, reason: str = ""):
         print("QSip_UA: Transaction Failed With", reason, "Id:", txn.id())
+        return
         self.sendRequest(req_method="MESSAGE",
                          request_uri="taisto@nisse.se", next_hop=NextHop("10.9.24.1", 5060, "UDP"),
                         req_from={"uri": "sip:kenneth@ip-s.se", "display_name": "Kenneth Den Store"},

@@ -9,7 +9,13 @@ from qsip.common import *
 from qsip.header import *
 sys.path.append('D:\\repos\\qsip')  # The logics of import's while developing.....
 from qsip.stack.ua import QSipUa
-
+import logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(name)s: %(message)s',
+    stream=sys.stderr,
+)
+log = logging.getLogger('main')
 
 def ObjDump(obj, prefix=None, all=False):
     p = prefix if not None else type(obj)
@@ -23,7 +29,8 @@ def ObjDump(obj, prefix=None, all=False):
 if __name__ == "__main__":
     method = "InVite"
     q = QSipUa(IpSrc("", 5060, PROTOCOL.UDP), IpSrc("", 6050, "TCP"))
-    if 1 == 1:
+    q.bindToNetwork()
+    if 1 == 0:
         q.sendRequest(req_method="INVITE",
                       request_uri="taisto@nisse.se", next_hop=NextHop("10.9.24.1", 5060, "UDP"),
                       req_from={"uri": "sip:kenneth@ip-s.se", "display_name": "Kenneth Den Store"},
