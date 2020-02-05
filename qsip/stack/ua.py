@@ -13,11 +13,9 @@ from qsip.stack.txn import *
 
 class QSipUa(TxnUser):  # We dont really need the interface-concept...DuckTyping.
 
-    def __init__(self,
-                 localUdpInfo: IpSrc,
-                 localTcpInfo: IpSrc,
-                 outgoingProxyUri=None,  # Uri as String
-                 auth_info=None):
+    def __init__(self, *localPorts,
+                 outgoingProxyUri: str = None,  # Uri as String
+                 auth_info: dict = None):
 
         """Initialize the SIP service."""
         if auth_info is not None:
@@ -29,18 +27,19 @@ class QSipUa(TxnUser):  # We dont really need the interface-concept...DuckTyping
             self._outgoingProxyInfo = SipUri.createFromString(outgoingProxyUri)
         # print("IN1", localUdpInfo, type(localTcpInfo))
         # print("IN2", localTcpInfo, type(localTcpInfo))
-        assert isinstance(localUdpInfo, IpSrc) and isinstance(localTcpInfo, IpSrc), \
-            "Local IP cfg NOT supplied as dict{addr/port}"
+#        assert isinstance(localUdpInfo, IpSrc) and isinstance(localTcpInfo, IpSrc), \
+ #           "Local IP cfg NOT supplied as dict{addr/port}"
 
-        self._udpSource = localUdpInfo
-        self._tcpSource = localTcpInfo
-
+        self._udpSource = [p for p in localPorts if p.proto == PROTOCOL.UDP and p.port != 0]
+        self._tcpSource = [p for p in localPorts if p.proto == PROTOCOL.TCP and p.port != 0]
+        #print(f"udp, {type(self._udpSource)}, type2 {type(self._tcpSource)}", self._udpSource, self._tcpSource)
+        assert len(self._udpSource) + len(self._tcpSource) > 0, "We need at LEAST one port please!"
         self._messageQueue = []
         self._tpMgr = QSipTransport()
         self.txnList = {}
 
     def bindToNetwork(self, **kwargs):
-        self._tpMgr.bind(self._udpSource, self._tcpSource)
+        self._tpMgr.bind(self._udpSource + self._tcpSource)
 
     def addLocalPort(self):
         # We might want to send of lots of ports...need this?
