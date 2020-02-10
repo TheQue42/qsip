@@ -1,5 +1,7 @@
+from __future__ import annotations
 import random
 from enum import Enum
+
 from qsip.common.enums import *
 from qsip.common.exceptions import *
 from qsip.common.utils import *
@@ -10,10 +12,6 @@ from typing import NamedTuple, Union, NewType
 
 _IpInfo = NamedTuple("_IpInfo", [("addr", str), ("port", int), ("proto", PROTOCOL)])
 
-class TestNameType(NamedTuple):
-    a: str
-    b: str
-    c: int
 
 class IpInfo(_IpInfo):
     def __new__(cls, addr, port, proto=PROTOCOL.UDP):
@@ -155,7 +153,6 @@ class SipUri:
             port = 0
         uri = re.sub(" +;", ";", uri)  # Strip whitespace
         uri = re.sub("; +", ";", uri)  # Strip whitespace
-        # uri = re.sub(";+", ";", uri)  # Strip whitespace
 
         # Lets extract any parameters
         params = dict()
@@ -180,45 +177,7 @@ class SipUri:
         return SipUri(user=user, addr=host, port=port)
 
 
-class HeaderEnum(Enum):
-    CALL_ID = "Call-ID"
-    TO = "To"
-    FROM = "From"
-    VIA = "Via"
-    CSEQ = "CSeq"
-    CONTACT = "Contact"
-    ROUTE = "Route"
-    RECROUTE = "Record-Route"
-    REFER_TO = "Refer-To"
-    EXPIRES = "Expires"
-    SUPPORTED = "Supported"
-    WARNING = "Warning"
-    ACCEPT = "Accept"
-    SERVER = "Server"
-    SUBJECT = "Subject"
-    USER_AGENT = "User-Agent"
-    MAX_FWD = "Max-Forwards"
-    CONTENT_TYPE = "Content-Type"
-    CUSTOM = ""
-
-    def __eq__(self, other):
-        if isinstance(other, HeaderEnum):
-            return self.value == other.value
-        else:
-            if isinstance(other, str):
-                return self.name.lower() == other.lower()
-            else:
-                assert False, "Can only compare with str(ings) or correct-type ENUMs:"
-
-    # We need to be hashable, and defining __eq__() undefines the default __hash__
-    # It should(?) be safe to reuse the Object-class version, since we're not storing anything else
-    # in this class
-    def __hash__(self) -> int:
-        return super().__hash__()
-
-
 _SINGLE_USE_HEADERS = [HeaderEnum.FROM, HeaderEnum.TO, HeaderEnum.CALL_ID, HeaderEnum.CSEQ, HeaderEnum.CONTENT_TYPE]
-
 _VIA_MAGIC_COOKIE: str = "z9hG4Bk"
 
 
@@ -246,8 +205,31 @@ class Header:
     def stringifyParameters(self) -> str:
         params = str()
         for paramKey in self.parameters.keys():
-            params = params + " ;" + paramKey + "=" + str(self.parameters[paramKey])
+            if str(self.parameters[paramKey]) != "":
+                params = params + " ;" + paramKey + "=" + str(self.parameters[paramKey])
+            else:
+                params = params + " ;" + paramKey
         return params
+
+    @classmethod
+    def fromString(cls, hType: HeaderEnum,  data):
+        try:
+            if hType == HeaderEnum.VIA:
+                return ViaHeader.fromString(data)
+            elif HeaderEnum.isNameAddress(hType):
+                return NameAddress.fromString(hType, data)
+            elif hType == HeaderEnum.CSEQ:
+                return CseqHeader.fromString(data)
+            elif HeaderEnum.isSimpleHeader(hType):
+                return SimpleHeader.fromString(hType, data)
+            elif hType == HeaderEnum.SUPPORTED:
+                pass
+            elif hType == HeaderEnum.WARNING:
+                pass
+        except HeaderParseError as err:
+            print("ParseError", err)
+            raise
+        pass
 
     def __str__(self) -> str:
         # print("Using base-class __str__ for:", self.htype.value)
@@ -267,10 +249,15 @@ class SimpleHeader(Header):
 
     # NO overriding of __str__ here. Use base-class
 
+    @classmethod
+    def fromString(cls, hType: HeaderEnum, data: str):
+        stripped = re.sub("^ +", "", data)  # Strip whitespace
+        return SimpleHeader(hType, stripped)
+
 
 class CseqHeader(Header):
 
-    def __init__(self, method: MethodEnum, number=-1, **kwargs):
+    def __init__(self, method: MethodEnum, number: int =-1, **kwargs):
         if number < 0:
             number = genRandomIntString(24)
         values = {}
@@ -283,12 +270,15 @@ class CseqHeader(Header):
         return hName + ": " + self.values["method"].value.upper() + " " \
                + str(self.values["number"])  # + self.stringifyParameters() CSeq not allowed to have params...
 
+    @classmethod
+    def fromString(cls, data):
+        cseq_nr, cseq_method = data.split()
+        return CseqHeader(method=MethodEnum.fromStr(cseq_method), number=int(cseq_nr))
 
 class ViaHeader(Header):
 
     def __init__(self, proto: PROTOCOL, host=None, port=0, **kwargs):  # TODO: Via;branch is parameter!
         self.protocol = proto
-        assert self.protocol == PROTOCOL.UDP, "Only UDP supported"
         values = {}
         values["sent_by"] = {}
         values["sent_by"]["host"] = host
@@ -337,6 +327,21 @@ class ViaHeader(Header):
             except:
                 # We could of course have used isinstance(self.branch, int) but...
                 self.branch = self.branch + "1"
+
+    @classmethod
+    def fromString(cls, data):
+        """SIP/2.0/UDP 10.9.24.22:51573;branch=z9hG4bK.575186f8;rport;alias"""
+        #print(f"got: {data}")
+        mg = re.search("^\s*SIP/2.0/([a-zA-Z]{3,3})\s+([a-zA-Z0-9.:]+)\s*(.*)", data)
+        if mg:
+            #print(f"gr1 {mg.group(1)}, mg2: {mg.group(2)}, mg3: {mg.group(3)}")
+            proto = mg.group(1)
+            sip_host = mg.group(2)
+            params = parseParameters(mg.group(3))
+            #print(f"proto:{proto}, host:{sip_host}, params: {params}")
+            host_ip, host_port = sip_host.split(":")
+            return ViaHeader(PROTOCOL.fromStr(proto), host=host_ip, port=int(host_port), **params)
+        return None
 
     def __str__(self):
         hName = self.htype.value
@@ -426,6 +431,19 @@ class NameAddress(Header):
     def setUri(self, uri: str):
         self.values["uri"] = addSipToUri(uri)
 
+    @classmethod
+    def fromString(cls, type: HeaderEnum, data):
+        mg = re.search('\s+"*([a-z-A-Z0-9 .]+){0,1}"*\s*<*(sip:\w+@[a-zA-Z0-9.:_-]+)\s*(.*)>*', data)
+        if mg:
+            display_name = mg.group(1)
+            uri = mg.group(2)
+            rest = mg.group(3)
+            rest = re.sub(" +;", ";", rest)  # Strip whitespace
+            rest = re.sub("; +", ";", rest)  # Strip whitespace
+            params = parseParameters(rest)
+        else:
+            print(f"Failed parsing", data)  # TODO: Exception throwing...
+        return NameAddress(type, uri=uri, display_name=display_name, **params)
 
 class HeaderList:  # Not really a >> [list()] <<
 

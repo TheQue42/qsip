@@ -1,22 +1,23 @@
 import socket
 import datetime
 import sys
+from random import randint
+from time import sleep
 from qsip.common import *
 from qsip.header import *
+import qsip.message
 from qsip.common.utils import *
 from qsip.message import *
 import asyncio, logging, threading, warnings
 
+#logging.basicConfig( level=logging.DEBUG, format='(%(threadName)-10s) %(message)s')
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='(%(threadName)-10s) %(message)s',
-)
 
 class Singleton(type):
     _instances = {}
+
     def __call__(cls, *args, **kwargs):
-        #print("__CALL__", list(cls._instances.keys()), "args", args, "kwargs", kwargs )
+        # print("__CALL__", list(cls._instances.keys()), "args", args, "kwargs", kwargs )
         if cls not in cls._instances.keys():
             cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
 
@@ -25,6 +26,7 @@ class Singleton(type):
 
 class UdpReader(asyncio.DatagramProtocol):
     """"""
+
     def __init__(self):
         print("Starting UDP Reader")
         self.transport = ""
@@ -45,53 +47,77 @@ class UdpReader(asyncio.DatagramProtocol):
     def error_received(self, err):
         print("UdpReader: Error", err)
 
+
 MAX_UDP_DATA = 4096
 
-class NetReaderThread(threading.Thread):
+class UdpReaderThread(threading.Thread):
 
-    def __init__(self, group=None, target=None, name=None, transport_mgr=None, address=None, *, daemon=None):
-        super().__init__(group=group, target=target, name=name,
-                         daemon=daemon)
+    def __init__(self, target, transport_mgr, addresses:list, lock_handle: threading.Lock):
+        super().__init__(target=target)
         self.transport_mgr = transport_mgr
         self.socket = None
-        assert isinstance(address, IpSrc)
-        self.address = address  # Must contain IP addresses
+        self.addressList = addresses  # Must contain at least one IpSrc
+        self.thread_lock = lock_handle
 
-    async def readData(self, loop):
-        data = await loop.sock_recv(self.socket, MAX_UDP_DATA)
-        print(data.decode())
-        return data
 
-    def socketHandler(self):
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(self.readData(loop))
-        pass
+    async def readData(self, my_socket: socket):
+        myPort = my_socket.getsockname()
+        print("Starting to listen to port:", myPort)
+        await asyncio.sleep(randint(1, 3))
+        count = 0
+        bytesReceived = 0
+        while True:
+            try:
+                current_loop = asyncio.get_event_loop()
+                data = await current_loop.sock_recv(my_socket, MAX_UDP_DATA)
+                print(f"Got data on port {myPort}")
+                if self.thread_lock.acquire(blocking=True, timeout=0.5):
+                    self.transport_mgr.gotMessage(data.decode())
+                    self.thread_lock.release()
+                else:
+                    print("UDP Message discarded, thread.lock failed")
+                    continue
+                count = count + 1
+                bytesReceived = bytesReceived + len(data)
+                #print(f"We've got {count} packets, and a total of {bytesReceived} bytes")
+            except BaseException as err:
+                print(f'Failure processing data from socket. Type: {type(err)}, errorValue:["{err}"]')
+                break
 
-    def useEndpoint(self):
-        loop = asyncio.new_event_loop()
-        t = loop.create_datagram_endpoint(UdpReader, family=socket.AF_INET,
-                                          local_addr=(self.address.addr, self.address.port))
-        loop.run_until_complete(t)
-        loop.run_forever()
-        print("Done:", t)
+    async def handleSockets(self):
+        taskList = []
+        for a in self.addressList:
+            my_socket = create_socket(a.proto, IP_VERSION.V4)
+            if not bind_socket(my_socket, bindAddress=a.addr, bindPort=a.port):
+                print("Error binding", a)
+                continue
+            else:
+                print(f"Preping asyncio for PORT: - {a.port}")
+                taskList.append(self.readData(my_socket))
+
+        try:
+            results = await asyncio.gather(taskList[0])
+        except BaseException as err:
+            print("AsyncIo Error", err)
 
     def run(self):
-        print("THREAD: We've got tp:", self.address, "\n")
-        if self.address.proto == PROTOCOL.UDP and False:
-            self.useEndpoint()
-        elif self.address.proto == PROTOCOL.UDP:
-            my_socket = create_socket(self.address.proto, IP_VERSION.V4)
-            if bind_socket(my_socket, bindAddress=self.address.addr, bindPort=self.address.port):
-                self.socket = my_socket
-                #logging.debug("\nSocket Bound in THREAD", my_socket.getsockname())
-                self.socketHandler()
-        else:
-            print("TCP NOT SUPPORTED", self.addresses)
+        print(f"THREAD-{threading.get_ident()}: We've got tp:", self.addressList, "\n")
+        for p in self.addressList:
+            assert p.proto == PROTOCOL.UDP, "Only UDP Ports please!"
+
+        #event_loop = asyncio.new_event_loop()
+        try:
+            #event_loop.run_until_complete(self.handleSockets())
+            asyncio.run(self.handleSockets())
+        finally:
+            print("Finally")
+            #event_loop.close()
+
         pass
 
 
 class QSipTransport(metaclass=Singleton):
-
+    """ Transport Manager """
     def __init__(self, **kwargs):
         # Since we're binding and connecting the socket towards each specific dstAddr, we need to keep track of which is
         # which. Its currently based ONLY on key="addr", but with TCP support, we're gonna have to change that,
@@ -102,29 +128,44 @@ class QSipTransport(metaclass=Singleton):
         self._tcpThreads = []
         self._connectedSockets[PROTOCOL.UDP] = {}  # Keyed on DstIp
         self._connectedSockets[PROTOCOL.TCP] = {}  # Keyed on DstIp
+        self.count = 0
 
-    def listenOnSocket(self, source: IpSrc = IpSrc("",0, PROTOCOL.TCP) ):
+
+    def gotMessage(self, data: str):
+        self.count = self.count + 1
+        msg = None
+        try:
+            if Msg.isResponse(data):
+                msg = Response.fromString(data)
+            elif Msg.isRequest(data):
+                msg = Request.fromString(data)
+            else:
+                print(f"Discarding bad message\n")
+        except GenericSipError as err:    # TODO: Just catch/ignore ParserErrors
+            print(f"Discarding message because {err}")
+        print(f"Received entire message: ------------\n{msg}\n---------\n")
+    def listenOnSocket(self, source: IpSrc = IpSrc("", 0, PROTOCOL.TCP)):
         pass
 
-
-    def bind(self, *localSources: IpSrc):
+    def bind(self, localSources: tuple):
         assert len(localSources) > 0, "We need some ports!"
-        udpPorts = [p for p in localSources if p.proto == PROTOCOL.UDP and p.port != 0]
-        tcpPorts = [p for p in localSources if p.proto == PROTOCOL.TCP and p.port != 0]
+        print(f"Type is: {type(localSources)}", localSources)
+        lock = threading.Lock()
         for p in localSources:
             if p.proto == PROTOCOL.UDP:
-                thread_udp = NetReaderThread(target=NetReaderThread, transport_mgr=self, address=p)
+                thread_udp = UdpReaderThread(target=UdpReaderThread, transport_mgr=self, addresses=[p], lock_handle=lock)
                 self._udpThreads.append(thread_udp)
                 thread_udp.start()
-            elif p.proto == NetReaderThread.TCP:
-                thread_tcp = NetReaderThread(target=NetReaderThread, transport_mgr=self, address=p)
+                sleep(1.0)
+            elif p.proto == PROTOCOL.TCP:
+                thread_tcp = UdpReaderThread(target=UdpReaderThread, transport_mgr=self, addresses=[p])
                 self._tcpThreads.append(thread_tcp)
                 thread_tcp.start()
             else:
                 pass
-            #my_socket = create_socket(local_port.proto, IP_VERSION.V4)
-            #if bind_socket(my_socket, bindAddress=local_port.addr, bindPort=local_port.port):
-                #self._localBound[local_port] = socket
+            # my_socket = create_socket(local_port.proto, IP_VERSION.V4)
+            # if bind_socket(my_socket, bindAddress=local_port.addr, bindPort=local_port.port):
+            # self._localBound[local_port] = socket
 
     def getUdpSocket(self, destination: IpDst, source: IpSrc = None) -> socket:
         if destination.addr not in self._connectedSockets[destination.proto].keys():

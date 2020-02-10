@@ -11,6 +11,8 @@ class HeaderOnlyAllowedOnce(GenericSipError):
 class ParameterExists(GenericSipError):
     pass
 
+class HeaderParseError(GenericSipError):
+    pass
 
 class InvalidParameter(GenericSipError):
     pass

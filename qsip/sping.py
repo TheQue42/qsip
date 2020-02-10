@@ -28,8 +28,10 @@ def ObjDump(obj, prefix=None, all=False):
 
 if __name__ == "__main__":
     method = "InVite"
-    q = QSipUa(IpSrc("", 5060, PROTOCOL.UDP), IpSrc("", 6050, "UDP"))
+    q = QSipUa(IpSrc("", 5060, PROTOCOL.UDP))  #, IpSrc("", 6050, "UDP"))  #
     q.bindToNetwork()
+    #ch = NameAddress.fromString(HeaderEnum.FROM, '  sip:bob@lab4.net;tag=4b454dbb')
+    #print("ch is", ch)
     if 1 == 0:
         q.sendRequest(req_method="INVITE",
                       request_uri="taisto@nisse.se", next_hop=NextHop("10.9.24.1", 5060, "UDP"),
@@ -38,9 +40,3 @@ if __name__ == "__main__":
                       req_to={"uri": "taisto@ip-s.se", "display_name": "TaistoQvist"},
                       req_body="hejsan")
 
-    p1 = IpSrc("10.1.1.1", 5555)
-    p2 = IpDst("10.1.1.1", 5555, "TCP")
-    #print(types)
-    #p2 = TestNameType(1, 2, 3)
-
-    #print(f"P1: {p1}, p2: {p2}, equal: {p1 == p2}", "TypeP1", type(p1), "TypeP2", type(p2))

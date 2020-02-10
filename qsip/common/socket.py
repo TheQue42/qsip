@@ -36,7 +36,7 @@ def create_socket(proto : PROTOCOL, ip_version : IP_VERSION) -> socket:
 
 def bind_socket(my_socket: socket, *, bindAddress ="", bindPort = 0) -> bool:
     """"""
-    print("Binding", my_socket)
+    print(f"Binding: {bindPort}")
     try:    ### TODO: Acquire local-IP. Will be 172.x in docker...
         print(f"Trying to bind socket({my_socket.fileno()}) with: [{bindAddress}] and Port: [{bindPort}]")
         ### TQ-TODO: IpV6 will expect a 4-tuple. (host, port, flowinfo, scopeid)
