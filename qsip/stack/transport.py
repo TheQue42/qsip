@@ -70,7 +70,7 @@ class UdpReaderThread(threading.Thread):
             try:
                 current_loop = asyncio.get_event_loop()
                 data = await current_loop.sock_recv(my_socket, MAX_UDP_DATA)
-                print(f"Got data on port {myPort}")
+                #print(f"Got data on port {myPort}", data)
                 if self.thread_lock.acquire(blocking=True, timeout=0.5):
                     self.transport_mgr.gotMessage(data.decode())
                     self.thread_lock.release()
@@ -79,9 +79,10 @@ class UdpReaderThread(threading.Thread):
                     continue
                 count = count + 1
                 bytesReceived = bytesReceived + len(data)
-                #print(f"We've got {count} packets, and a total of {bytesReceived} bytes")
-            except BaseException as err:
+                print(f"We've got {count} packets, and a total of {bytesReceived} bytes")
+            except Exception as err:
                 print(f'Failure processing data from socket. Type: {type(err)}, errorValue:["{err}"]')
+                raise
                 break
 
     async def handleSockets(self):
@@ -97,18 +98,20 @@ class UdpReaderThread(threading.Thread):
 
         try:
             results = await asyncio.gather(taskList[0])
-        except BaseException as err:
+        except Exception as err:
             print("AsyncIo Error", err)
+            raise
 
     def run(self):
         print(f"THREAD-{threading.get_ident()}: We've got tp:", self.addressList, "\n")
         for p in self.addressList:
             assert p.proto == PROTOCOL.UDP, "Only UDP Ports please!"
 
-        #event_loop = asyncio.new_event_loop()
         try:
-            #event_loop.run_until_complete(self.handleSockets())
             asyncio.run(self.handleSockets())
+        except Exception as err:
+            print(f"Exception error: {err}")
+            raise
         finally:
             print("Finally")
             #event_loop.close()
@@ -130,7 +133,6 @@ class QSipTransport(metaclass=Singleton):
         self._connectedSockets[PROTOCOL.TCP] = {}  # Keyed on DstIp
         self.count = 0
 
-
     def gotMessage(self, data: str):
         self.count = self.count + 1
         msg = None
@@ -143,7 +145,9 @@ class QSipTransport(metaclass=Singleton):
                 print(f"Discarding bad message\n")
         except GenericSipError as err:    # TODO: Just catch/ignore ParserErrors
             print(f"Discarding message because {err}")
-        print(f"Received entire message: ------------\n{msg}\n---------\n")
+            raise
+        #print(f"Received entire message: ------------\n{msg}\n---------\n")
+
     def listenOnSocket(self, source: IpSrc = IpSrc("", 0, PROTOCOL.TCP)):
         pass
 
@@ -183,6 +187,5 @@ class QSipTransport(metaclass=Singleton):
             else:
                 # Error binding socket
                 return None  # TODO: Errorhandling.
-            return None, "", 0
         else:
             return self._connectedSockets[destination.proto][destination.addr]

@@ -199,7 +199,7 @@ class Header:
     def addParam(self, name: str, value: str, allow_update=False):
         # TODO Append multiple parameters, allowAppend=False
         if str in self.parameters.keys() or allow_update:
-            raise InvalidParameter
+            raise InvalidParameter(str(name))
         self.parameters[name] = value
 
     def stringifyParameters(self) -> str:
@@ -223,13 +223,12 @@ class Header:
             elif HeaderEnum.isSimpleHeader(hType):
                 return SimpleHeader.fromString(hType, data)
             elif hType == HeaderEnum.SUPPORTED:
-                pass
+                raise NotYetImplemented
             elif hType == HeaderEnum.WARNING:
-                pass
-        except HeaderParseError as err:
+                raise NotYetImplemented
+        except ParseError as err:
             print("ParseError", err)
             raise
-        pass
 
     def __str__(self) -> str:
         # print("Using base-class __str__ for:", self.htype.value)
@@ -248,6 +247,8 @@ class SimpleHeader(Header):
         super().__init__(htype=htype, hvalues=values, **kwargs)
 
     # NO overriding of __str__ here. Use base-class
+    def getValue(self):
+        return self.values["0"]
 
     @classmethod
     def fromString(cls, hType: HeaderEnum, data: str):
@@ -324,9 +325,10 @@ class ViaHeader(Header):
                     self.branch = self.branch + "_" + str(new_branch)
                 else:
                     self.branch = str(new_branch)
-            except:
+            except ValueError as err:   # TODO: What are we expecting here?
                 # We could of course have used isinstance(self.branch, int) but...
                 self.branch = self.branch + "1"
+                raise
 
     @classmethod
     def fromString(cls, data):
@@ -452,7 +454,7 @@ class HeaderList:  # Not really a >> [list()] <<
 
     def add(self, header: Header, addToTop=True) -> bool:
         # TODO: Storing headers in dict/hash is maybe not so good, since it will change the order relative to how
-        #       they were added. It wont change inter-(same)-header order, so it wont FAIL, but it might feel weird?
+        #       they were added. It wont change inter-(same)-header order, so it wont FAIL, but it might feel weird...
         htype = header.htype
         # print("Adding key: ", htype.name)
         if htype not in self._headerList.keys():
@@ -489,7 +491,7 @@ class HeaderList:  # Not really a >> [list()] <<
 
     def __setitem__(self, key, value):
         if key not in list(HeaderEnum):
-            raise InvalidHeader
+            raise UnsupportedHeader
         self._headerList[key] = value
 
     def __getitem__(self, key):
@@ -498,13 +500,22 @@ class HeaderList:  # Not really a >> [list()] <<
         return self._headerList[key]
 
     def __delitem__(self, key):
-        pass
+        pass  # TODO delitem
 
     def __len__(self):
-        pass
+        raise NotYetImplemented
 
-    def __keytransform__(self, key):
-        pass
+    def getFirst(self, htype):
+        if htype not in list(HeaderEnum):
+            raise UnsupportedHeader
+        else:
+            if htype not in self._headerList.keys():
+                raise GenericSipError
+            return self._headerList[htype][0]
+
+
+    #def __keytransform__(self, key):
+     #   pass
 
 
 class HeaderIterator:  # TODO: Filter for iterator?

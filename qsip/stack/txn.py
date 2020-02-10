@@ -118,9 +118,25 @@ class TxnUser:
     def txnTerminated(self, txn: Txn, reason: str = "", **kwargs):
         assert False, "Should be overridden by UA"
 
+class QTxnMgr(metaclass=Singleton):
+    """ Txn Manager """
+
+    def __init__(self, **kwargs):
+        print("Initializing Singleton Txn Manager")
+        self._txn_storage = dict(str, Txn)  # Keyed on ;branch?
+
+    def matchTxn(self, txnId: str) -> Txn:
+        if txnId in self._txn_storage.keys():
+            return self._txn_storage[txnId]
+        else:
+            return None
+
+    def addTxn(self, txn: Txn):
+        self._txn_storage[txn.id()] = txn
+
 
 class Txn:
-
+    """"""
     def __init__(self, sender: TxnUser):
         self.transportMgr = QSipTransport()
         self._id = genRandomIntString(24)

@@ -60,7 +60,6 @@ class QSipUa(TxnUser):  # We dont really need the interface-concept...DuckTyping
         self._password = password
 
 
-    # Send Stateless Request.
     def sendRequest(self, *,
                     req_method,
                     request_uri: str,

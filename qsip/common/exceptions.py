@@ -1,18 +1,37 @@
 class GenericSipError(Exception):
     pass
 
-
-class InvalidHeader(GenericSipError):
+class NotYetImplemented(GenericSipError):
     pass
 
-class HeaderOnlyAllowedOnce(GenericSipError):
+class HeaderError(GenericSipError):
+    """When trying to add/modify incorrectly"""
     pass
 
-class ParameterExists(GenericSipError):
+class ParseError(GenericSipError):
     pass
 
-class HeaderParseError(GenericSipError):
+class HeaderOnlyAllowedOnce(HeaderError):
     pass
 
-class InvalidParameter(GenericSipError):
+class MissingMandatoryHeader(HeaderError):
     pass
+
+class UnsupportedHeader(HeaderError):
+    pass
+
+class InvalidParameter(HeaderError):
+    pass
+
+class ParameterExists(HeaderError):
+    pass
+
+class UriParseError(ParseError):
+    pass
+
+class ContentLengthMismatch(ParseError):
+    pass
+
+class MessageTooBig(ParseError):
+    pass
+
