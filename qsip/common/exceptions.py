@@ -17,7 +17,13 @@ class HeaderOnlyAllowedOnce(HeaderError):
 class MissingMandatoryHeader(HeaderError):
     pass
 
-class UnsupportedHeader(HeaderError):
+class HeaderNotFound(HeaderError):
+    pass
+
+class HeaderUnsupported(HeaderError):
+    pass
+
+class InvalidHeaderType(HeaderError):
     pass
 
 class InvalidParameter(HeaderError):

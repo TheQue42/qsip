@@ -30,13 +30,13 @@ def create_socket(proto : PROTOCOL, ip_version : IP_VERSION) -> socket:
         except socket.error as err:
             _LOGGER.exception("setsockOpt(SO_REUSEADDR) error %s" % (err))
 
-    print(f"{proto.name}-Socket successfully created: FileNo: ", s.fileno())
+    #print(f"{proto.name}-Socket successfully created: FileNo: ", s.fileno())
     return s
 
 
 def bind_socket(my_socket: socket, *, bindAddress ="", bindPort = 0) -> bool:
     """"""
-    print(f"Binding: {bindPort}")
+    #print(f"Binding: {bindPort}")
     try:    ### TODO: Acquire local-IP. Will be 172.x in docker...
         print(f"Trying to bind socket({my_socket.fileno()}) with: [{bindAddress}] and Port: [{bindPort}]")
         ### TQ-TODO: IpV6 will expect a 4-tuple. (host, port, flowinfo, scopeid)
@@ -51,7 +51,7 @@ def bind_socket(my_socket: socket, *, bindAddress ="", bindPort = 0) -> bool:
 def connect_socket(my_socket : socket, dst_addr : str, dst_port : int):
     """This is needed to get the local IP and Port"""
 
-    print(f"Will (attempt to) connect with: socket({my_socket.fileno()}), towards {dst_addr}, {dst_port}")
+    #print(f"Will (attempt to) connect with: socket({my_socket.fileno()}), towards {dst_addr}, {dst_port}")
     try:
         my_socket.connect((dst_addr, dst_port))
     except socket.error as err:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from enum import Enum
-
+from qsip.common.exceptions import *
 
 class PROTOCOL(Enum):
     TCP = 0  # SO_STREAM??
@@ -74,6 +74,21 @@ class HeaderEnum(Enum):
                 return self.name.lower() == other.lower()
             else:
                 assert False, "Can only compare with str(ings) or correct-type ENUMs:"
+
+    @classmethod
+    def fromStr(cls, name: str):
+        hmatch = [h for h in list(HeaderEnum) if h.value.upper() == name.upper()]
+        if len(hmatch) == 0:
+            raise HeaderUnsupported
+        return hmatch[0]  # Are we really returning an ENUM CLASS here?
+
+    @staticmethod
+    def isSupportedHeader(name:str):
+        try:
+            h = HeaderEnum.fromStr(name)
+            return h
+        except HeaderUnsupported:
+            return None
 
     # We need to be hashable, and defining __eq__() undefines the default __hash__
     # It should(?) be safe to reuse the Object-class version, since we're not storing anything else

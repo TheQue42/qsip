@@ -29,14 +29,16 @@ def ObjDump(obj, prefix=None, all=False):
 if __name__ == "__main__":
     method = "InVite"
     q = QSipUa(IpSrc("", 5060, PROTOCOL.UDP))  #, IpSrc("", 6050, "UDP"))  #
-    q.bindToNetwork()
-    #ch = NameAddress.fromString(HeaderEnum.FROM, '  sip:bob@lab4.net;tag=4b454dbb')
-    #print("ch is", ch)
-    if 1 == 0:
-        q.sendRequest(req_method="INVITE",
+    # q.bindToNetwork()
+    # From: Kalle sip:destination.com; tag=2; param=2
+    #ch = NameAddress.fromString(HeaderEnum.FROM, ' "Kalle J. Petterson" <sip:destination.com;transport=UDP> ; tag=2; param=2')
+    #print(f"ch is ({ch})")
+    if 1 == 1:
+        q.sendRequest(req_method="OPTIONS",
                       request_uri="taisto@nisse.se", next_hop=NextHop("10.9.24.1", 5060, "UDP"),
                       req_from={"uri": "sip:kenneth@ip-s.se", "display_name": "Kenneth Den Store"},
                       # Cant add custom from-tag.
                       req_to={"uri": "taisto@ip-s.se", "display_name": "TaistoQvist"},
-                      req_body="hejsan")
+                      req_body="hejsan",
+                      MyHeader="Petter", Route="sip:10.9.24.22:5060")
 

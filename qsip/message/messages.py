@@ -35,6 +35,8 @@ class Msg:
         self._headers.add(header)
 
     def getTopHeader(self, htype: HeaderEnum) -> Header:
+        if len(self.getHeaders(htype)) == 0:
+            raise HeaderNotFound
         return self.getHeaders(htype)[0]
 
     def getHeaders(self, htype=None) -> HeaderList:
@@ -114,12 +116,11 @@ class Request(Msg):
 
     @classmethod
     def create(cls, *,
-               method,
-               from_info=None,
-               to_info=None,
-               request_uri: str,
-               body: str):
-
+               method: MethodEnum, request_uri: str,
+               from_info=None, to_info=None,
+               body: str,
+               **kwargs):
+        """Mainly used when sending requests 'manually' via API/CLI"""
         method = MethodEnum.fromStr(method)
 
         toH = NameAddress(HeaderEnum.TO, uri=to_info["uri"], display_name=to_info["display_name"])
@@ -127,13 +128,19 @@ class Request(Msg):
         header_list = HeaderList()
         header_list.add(fromH)
         header_list.add(toH)
+        for kw in kwargs:
+            htype = HeaderEnum.isSupportedHeader(kw)
+            if htype:
+                kwHeader = Header.fromString(htype, kwargs[kw]) #SimpleHeader(htype, kwargs[kw])
+            else:
+                kwHeader = CustomHeader(hname=kw, value=kwargs[kw])
+            header_list.add(kwHeader)
         populateMostMandatoryHeaders(header_list, method)
-        Request(method=method,
-                from_info=fromH,
-                to_info=toH,
-                request_uri=SipUri.createFromString(request_uri),
-                header_list=header_list,
-                body=body)
+        # TODO: Use kwargs to create CustomHeader("Key: Value")
+        return Request(method=method,
+                       request_uri=SipUri.createFromString(request_uri),
+                       header_list=header_list,
+                       body=body)
 
     def __init__(self,
                  method: MethodEnum,
@@ -187,6 +194,13 @@ class Request(Msg):
         request.validateMandatoryHeaders()
         return request
 
+    def setTopViaBranch(self, branch: str):
+        """The ;branch is used by the transaction layer for uniqueness identification.
+           It is intended to be used BEFORE the request is sent.
+           Its value SHOULD be based on a random >10 char string of plain \w.
+        """
+        topVia = self.getTopHeader(HeaderEnum.VIA)
+        topVia.initBranch(branch)
 
 class Response:
 

@@ -33,27 +33,32 @@ class IpInfo(_IpInfo):
     #     return super(IpInfo, self).__init__(self) (This calls Object.__init__() which doesnt want any params.
 
 
-# TODO: Use typing.NewType instead of subclass.
+# TODO: Use typing.NewType instead of subclass?
 class IpSrc(IpInfo):
     __slots__ = ()
+
 
 class IpDst(IpInfo):
     #__slots__ = ()
     pass
 
+
 class NextHop(IpInfo):
     __slots__ = ()
+
 
 class SipHost:
 
     def isFqdn(self, addr: str):
-        return False
+        return not re.match("[0-9.]+", addr) # TODO Ipv6
 
     def __init__(self, addr: str, port=0):
         assert len(addr) > 0, "Zero length address/host"
         if self.isFqdn(addr):  # TODO FqDN logic NOT defined
             self._fqdn = addr
             self.addr = None
+            self.port = None
+            self.ipVersion = None
             self._resolved = False
         else:
             self.addr = addr
@@ -70,13 +75,16 @@ class SipHost:
     def resolve(self, naptr=False) -> list:
         # Set value in self.addr?
         return []
-        # Do lots of RFC3263 Magic
+        # TODO Do lots of RFC3263 Magic
+
+    def __repr__(self):
+        return "SipHost: addr=%r, port=%r fqdn=%r, resolved=%r, ipVersion=%r" %  \
+               (self.addr, self.port, self._fqdn, self._resolved, self.ipVersion)
 
     def __str__(self):
-        if self.port is None or self.port == 0:
-            return self.addr
-        else:
-            return self.addr + ":" + str(self.port)
+        host = self.addr if self.addr is not None else self._fqdn
+        port = ":" + str(self.port) if self.port is not None else ""
+        return host + port
 
 
 class UriParams:
@@ -94,14 +102,14 @@ class SipUri:
 
     def __init__(self, *, user: str, addr: str, port=0, **kwargs):
         self.user = user
-        self.host = SipHost(addr, port)
+        self.host_port = SipHost(addr, port)
         self.uri_params = UriParams(**kwargs)
 
     def __str__(self):
         if self.user is None or len(self.user) == 0:
-            return "sip:" + str(self.host) + str(self.uri_params)
+            return "sip:" + str(self.host_port) + str(self.uri_params)
         else:
-            return "sip:" + self.user + "@" + str(self.host) + str(self.uri_params)
+            return "sip:" + self.user + "@" + str(self.host_port) + str(self.uri_params)
 
     def __radd__(self, other):
         if isinstance(other, str):
@@ -276,6 +284,7 @@ class CseqHeader(Header):
         cseq_nr, cseq_method = data.split()
         return CseqHeader(method=MethodEnum.fromStr(cseq_method), number=int(cseq_nr))
 
+
 class ViaHeader(Header):
 
     def __init__(self, proto: PROTOCOL, host=None, port=0, **kwargs):  # TODO: Via;branch is parameter!
@@ -297,7 +306,7 @@ class ViaHeader(Header):
         return self.branch
 
     def initBranch(self, randomString: str):
-        self.branch = _VIA_MAGIC_COOKIE
+        self.branch = _VIA_MAGIC_COOKIE + "_"
         self.branch = self.branch + randomString
 
     def setSentBy(self, host: str, port: int):
@@ -307,7 +316,7 @@ class ViaHeader(Header):
     def randomizeBranch(self, incremental: False, addMagicCookie=True):
         if not incremental:
             if addMagicCookie:
-                self.branch = _VIA_MAGIC_COOKIE
+                self.branch = _VIA_MAGIC_COOKIE + "_"
             self.branch = str(random.randint(0, 2 ** 60 - 1))  # TODO: ==>Hex
         else:
             # Here, we'll try increment the (maybe) number after ;branch = z9hG4Bk_<NUMBER>
@@ -345,11 +354,15 @@ class ViaHeader(Header):
             return ViaHeader(PROTOCOL.fromStr(proto), host=host_ip, port=int(host_port), **params)
         return None
 
-    def __str__(self):
+    def __repr__(self):
+        return "ViaHeader(%r): %r:%r, %r" % (self.protocol,
+                                             self.values["sent_by"]["host"], self.values["sent_by"]["port"],
+                                             self.branch)
+
+    def __str__(self, ignoreIps: bool = True):
         hName = self.htype.value
 
-        assert self.values["sent_by"]["host"] is not None \
-               and self.values["sent_by"]["port"] is not None, "You need to set IP Info"
+        assert (self.values["sent_by"]["host"] is not None and self.values["sent_by"]["port"] is not None), "You need to set IP Info"
 
         host = self.values["sent_by"]["host"]
         port = self.values["sent_by"]["port"]
@@ -403,17 +416,20 @@ class NameAddress(Header):
                   HeaderEnum.REFER_TO,
                   HeaderEnum.CUSTOM)  # TODO: Not used for validation yet
 
-    def __init__(self, htype: HeaderEnum, uri: str, display_name=None, **kwargs):
+    def __init__(self, htype: HeaderEnum, uri: Union[str, SipUri], display_name=None, **kwargs):
 
         if htype not in NameAddress.valid_list:
-            raise GenericSipError
+            raise InvalidHeaderType
 
         # We're assuming that "incoming" uri does NOT contain "<>"
         # TODO: Search for, and escape weird chars...
         values = {}
-        values["uri"] = addSipToUri(uri)  # Add sip: if needed
+        values["uri"] = uri if isinstance(uri, SipUri) else SipUri.createFromString(uri)
         values["display_name"] = display_name
         super().__init__(htype=htype, hvalues=values, **kwargs)
+
+    def getUri(self):
+        return self.values["uri"]
 
     def __str__(self) -> str:
         hName = self.htype.value
@@ -435,16 +451,31 @@ class NameAddress(Header):
 
     @classmethod
     def fromString(cls, type: HeaderEnum, data):
-        mg = re.search('\s+"*([a-z-A-Z0-9 .]+){0,1}"*\s*<*(sip:\w+@[a-zA-Z0-9.:_-]+)\s*(.*)>*', data)
+        # From: "Kalle J. Petterson" <sip:destination.com;transport=UDP> ; tag=2; param=2
+        # From: Kalle sip:destination.com; tag=2; param=2
+        # From: Kalle <sip:destination.com>; tag=2; param=2 ''
+        haveAngleBrackets = '\s*"*(.*?)"*\s*<(.*)>\s(.*)\s*'
+        mg = re.search(haveAngleBrackets, data)
         if mg:
             display_name = mg.group(1)
-            uri = mg.group(2)
-            rest = mg.group(3)
-            rest = re.sub(" +;", ";", rest)  # Strip whitespace
+            uri = SipUri.createFromString(mg.group(2))
+            rest = re.sub(" +;", ";", mg.group(3))  # Strip whitespace
             rest = re.sub("; +", ";", rest)  # Strip whitespace
             params = parseParameters(rest)
         else:
-            print(f"Failed parsing", data)  # TODO: Exception throwing...
+            # Without <> all ; are header params
+            NoAngleBrackets = '\s*(.*)\s*sip:([a-zA-Z@0-9.:_-]+)\s*(;*.*)'
+            mg = re.search(NoAngleBrackets, data)
+            if mg:
+                display_name = mg.group(1)
+                uri = SipUri.createFromString(mg.group(2))
+                rest = re.sub(" +;", ";", mg.group(3))  # Strip whitespace
+                rest = re.sub("; +", ";", rest)  # Strip whitespace
+                params = parseParameters(rest)
+            else:
+                raise ParseError("Unable to parse", data)
+
+        #print(f"dp: ({display_name}), uri:({uri}), params:({params})")
         return NameAddress(type, uri=uri, display_name=display_name, **params)
 
 class HeaderList:  # Not really a >> [list()] <<
@@ -491,12 +522,12 @@ class HeaderList:  # Not really a >> [list()] <<
 
     def __setitem__(self, key, value):
         if key not in list(HeaderEnum):
-            raise UnsupportedHeader
+            raise HeaderUnsupported
         self._headerList[key] = value
 
     def __getitem__(self, key):
         if key not in list(HeaderEnum):
-            raise InvalidHeader
+            raise HeaderUnsupported
         return self._headerList[key]
 
     def __delitem__(self, key):
@@ -507,7 +538,7 @@ class HeaderList:  # Not really a >> [list()] <<
 
     def getFirst(self, htype):
         if htype not in list(HeaderEnum):
-            raise UnsupportedHeader
+            raise HeaderUnsupported
         else:
             if htype not in self._headerList.keys():
                 raise GenericSipError
@@ -555,8 +586,8 @@ def populateMostMandatoryHeaders(headers: HeaderList, method: MethodEnum):
     viaTop = ViaHeader(PROTOCOL.UDP, order="4")
     userAgent = CustomHeader(hname="User-Agent", value="Sping/0.0.0.0.0.1", order="5")
     maxForwards = SimpleHeader(HeaderEnum.MAX_FWD, "70", order="6")
-    viaBottom = ViaHeader(PROTOCOL.UDP, order="7", branch="SomeOtherValue")
-    viaBottom.setSentBy("1.1.1.1", 6050)
+    #viaBottom = ViaHeader(PROTOCOL.UDP, order="7", branch="SomeOtherValue")
+    #viaBottom.setSentBy("1.1.1.1", 6050)
 
     headers.add(cseq)
     headers.add(subject)
@@ -564,7 +595,7 @@ def populateMostMandatoryHeaders(headers: HeaderList, method: MethodEnum):
     headers.add(viaTop)
     headers.add(userAgent)
     headers.add(maxForwards)
-    headers.add(viaBottom, False)
+    #headers.add(viaBottom, False)
 
 
 if __name__ == "__main__":

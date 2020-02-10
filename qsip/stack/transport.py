@@ -17,7 +17,6 @@ class Singleton(type):
     _instances = {}
 
     def __call__(cls, *args, **kwargs):
-        # print("__CALL__", list(cls._instances.keys()), "args", args, "kwargs", kwargs )
         if cls not in cls._instances.keys():
             cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
 
@@ -93,7 +92,7 @@ class UdpReaderThread(threading.Thread):
                 print("Error binding", a)
                 continue
             else:
-                print(f"Preping asyncio for PORT: - {a.port}")
+                #print(f"Preping asyncio for PORT: - {a.port}")
                 taskList.append(self.readData(my_socket))
 
         try:
@@ -173,7 +172,7 @@ class QSipTransport(metaclass=Singleton):
 
     def getUdpSocket(self, destination: IpDst, source: IpSrc = None) -> socket:
         if destination.addr not in self._connectedSockets[destination.proto].keys():
-            mysocket = create_socket(destination.port, IP_VERSION.V4)
+            mysocket = create_socket(destination.proto, IP_VERSION.V4)
             src = IpSrc("", 0, PROTOCOL.UDP) if source is None else source
             if bind_socket(mysocket, bindAddress=src.addr, bindPort=src.port):
                 # We need to connect, to get local Ip:port

@@ -10,6 +10,25 @@ from threading import Timer
 from qsip.stack.transport import *
 from qsip.stack.txn import *
 
+def routeRequest(sip_request: Request):
+    """Request Router. We check
+        Route-Uri or request-Uri:
+        ;transport-parameter.
+        TODO: FQDN-loopkup?
+    """
+    next_ip = ""
+    next_port = 0
+    topRoute = None
+    try:
+        topRoute = sip_request.getTopHeader(HeaderEnum.ROUTE)
+        next_hop_uri = topRoute.getUri();
+        host = next_hop_uri.host_port
+    except HeaderNotFound as err:
+        next_hop_uri = sip_request._request_uri
+        host = next_hop_uri.host_port
+    print(f"Next_Hop_Uri: {next_hop_uri}, hp:{host} X:", type(host))
+    return (host.addr, host.port, PROTOCOL.UDP)
+
 
 class QSipUa(TxnUser):  # We dont really need the interface-concept...DuckTyping.
 
@@ -36,13 +55,14 @@ class QSipUa(TxnUser):  # We dont really need the interface-concept...DuckTyping
         assert len(self._udpSource) + len(self._tcpSource) > 0, "We need at LEAST one port please!"
         self._messageQueue = []
         self._tpMgr = QSipTransport()
+        self._txnMgr = QTxnMgr()
         self.txnList = {}
 
     def bindToNetwork(self, **kwargs):
         self._tpMgr.bind(self._udpSource + self._tcpSource)
 
     def addLocalPort(self):
-        # We might want to send of lots of ports...need this?
+        # We might want to send FROM a lots of ports...need this?
         pass
 
     def sendRegister(self, dstAddress, dstPort, dstUri):
@@ -63,11 +83,11 @@ class QSipUa(TxnUser):  # We dont really need the interface-concept...DuckTyping
     def sendRequest(self, *,
                     req_method,
                     request_uri: str,
-                    next_hop: NextHop,
+                    next_hop: IpDst = None,
                     req_from=None,
                     req_to=None,
                     req_body="",
-                    copy_req_uri_to_to=True):
+                    copy_req_uri_to_to=True, **kwargs):
 
 
         if req_to is None and copy_req_uri_to_to:
@@ -78,39 +98,30 @@ class QSipUa(TxnUser):  # We dont really need the interface-concept...DuckTyping
             if "display_name" not in req_to.keys():
                 req_to["display_name"] = ""
 
-        assert isinstance(req_from, dict), "No valid"
+        assert isinstance(req_from, dict), "No valid From header"
         if "display_name" not in req_from.keys():
             req_from["display_name"] = ""
 
-        msgRequest = Request(method=req_method,
-                             from_info=req_from,
-                             to_info=req_to,
-                             request_uri=request_uri,
-                             body=req_body)
-
-        if req_method != "INVITE":
-            txn = NonInviteClientTxn(msgRequest, self, timer_t1=0.1)
+        msgRequest = Request.create(method=req_method,
+                                    from_info=req_from, to_info=req_to,
+                                    request_uri=request_uri,
+                                    body=req_body,
+                                    **kwargs)  # Additional Headers
+        #msgRequest.setTopViaBranch("kdjsaklkjlwkje23")
+        next_hop = routeRequest(msgRequest)
+        print(f"nexthop: {next_hop}", str(msgRequest.getHeaders(HeaderEnum.ROUTE)))
+        if next_hop.isResolved():
+            self._txnMgr.sendRequest(self, msgRequest, self._udpSource[0], next_hop=next_hop)
         else:
-            txn = InviteClientTxn(msgRequest, self)
+            print(msgRequest.getHeaders(HeaderEnum.CUSTOM))
 
-        self.txnList[txn.id()] = txn
-        txn.sendRequest(self._udpSource, next_hop)
+    def txnFailed(self, txn: Txn, reason: str = ""):
+        print(f"QSipUA: Transaction({txn.id()}) Failed With: {reason}")
 
     def testStuff(self):
         test = SipUri(user="", addr="10.1.1.2", port=5060, tag=genRandomIntString())
         test2 = SipUri(user="pelle", addr="10.1.1.2", port=5060, tag=genRandomIntString())
-        # print("Result: ", test2, "host", test.host, "user:", test2.user, "tags:", test.uri_params)
         print(test.uri_params)
 
-    def txnFailed(self, txn: Txn, reason: str = ""):
-        print("QSip_UA: Transaction Failed With", reason, "Id:", txn.id())
-        return
-        self.sendRequest(req_method="MESSAGE",
-                         request_uri="taisto@nisse.se", next_hop=NextHop("10.9.24.1", 5060, "UDP"),
-                        req_from={"uri": "sip:kenneth@ip-s.se", "display_name": "Kenneth Den Store"},
-                        # TODO Cant add custom from-tag.
-                        req_to={"uri": "taisto@ip-s.se", "display_name": "TaistoQvist"},
-                        req_body="hejsan")
-        sys.exit()
     def txnTerminate(self, txn: Txn, reason: str = ""):
         print("Transaction Terminated", txn.Id())
