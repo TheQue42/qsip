@@ -12,6 +12,34 @@ except:
     print("You need to:\n source getUnifiPass.sh")
     sys.exit(1)
 
+try:
+    IsRunningFromCron = os.environ["RUNNING_IN_CRON"]
+    cronExecution = True
+    class Color:
+        D="";
+        BOLD="";
+        UNBOLD="";
+        RED="";
+        GREEN="";
+        YELLOW="";
+        BLUE="";
+        PINK="";
+        CYAN="";
+        WHITE="";
+except:
+    class Color:
+        D="\033[0m";
+        BOLD="\033[1m";
+        UNBOLD="\033[22m";
+        RED="\033[31m";
+        GREEN="\033[32m";
+        YELLOW="\033[33m";
+        BLUE="\033[34m";
+        PINK="\033[35m";
+        CYAN="\033[36m";
+        WHITE="\033[37m";
+    cronExecution = False
+#print("Cron is", cronExecution)
 cloud_key_ip = "10.9.24.22"
 controller_port = 8443
 site_name = "default"
@@ -27,51 +55,44 @@ base_url = "https://{cloud_key_ip}:{controller_port}".format(
 # To fetch the list of all devices in json **GET** `/api/s/{site}/stat/alluser`
 #
 # Shouldn't be that hard to throw something together in python.
-
+TotalClients = 0
+listUrl = urljoin( base_url, "/api/s/{site_name}/stat/alluser".format(site_name=site_name) )
 
 def api_login(sess, base_url):
     payload = {"username": username, "password": password}
     url = urljoin(base_url, "/api/login")
     resp = sess.post(url, json=payload, headers={"Referer": "/login"})
     if resp.status_code == 200:
-        print("[*] successfully logged in")
+        #print("[*] successfully logged in")
         return True
     else:
-        print("[!] failed to login with provided credentials")
+        #print("[!] failed to login with provided credentials")
         return False
 
 
 def api_get_clients(sess, base_url, site_name):
-    url = urljoin(
-        base_url, "/api/s/{site_name}/stat/alluser".format(site_name=site_name)
-    )
+    url = listUrl
     resp = sess.get(url)
     client_list = resp.json()["data"]
-    print("[*] retreived client list:", len(client_list))
+    if not cronExecution:
+        print("[*] retreived client list:", len(client_list))
     return client_list
 
 
 def api_del_clients(sess, base_url, site_name, macs):
     payload = {"cmd": "forget-sta", "macs": macs}
     url = urljoin(base_url, "/api/s/{site_name}/cmd/stamgr".format(site_name=site_name))
-    print("Post Payload", payload)
     resp = sess.post(url, json=payload)
     client_list = resp.json()["data"]
-    json.dumps(resp.json(), indent=2, sort_keys=True, ensure_ascii=False)
-    print(f'\nPurged Clients Completed With: {resp.status_code}. MacsIn: {len(macs)}, MacsReturned: {len(client_list)}')
+    time.sleep(2)
+    newClientList = api_get_clients(sess, base_url, site_name)
+    if len(newClientList) == TotalClients:
+        print("Seems We didnt change anything", len(newClientList), TotalClients)
+    #json.dumps(resp.json(), indent=2, sort_keys=True, ensure_ascii=False)
+    if cronExecution and len(macs) != len(client_list) or not cronExecution:
+        print(f'\nPurged Clients Completed With RspCode: {resp.status_code}.\nMacsIn: {len(macs)}, MacsReturned: {len(client_list)}')
     return client_list
 
-class Color:
-    D="\033[0m";
-    BOLD="\033[1m";
-    UNBOLD="\033[22m";
-    RED="\033[31m";
-    GREEN="\033[32m";
-    YELLOW="\033[33m";
-    BLUE="\033[34m";
-    PINK="\033[35m";
-    CYAN="\033[36m";
-    WHITE="\033[37m";
 
 import time,re
 def client_macs(client_list):
@@ -102,9 +123,10 @@ def client_macs(client_list):
             "tx_packets" not in client and "rx_packets" not in client):
             first = time.localtime(client["first_seen"])
             last = first = time.localtime(client["last_seen"])
-            print(f'{Color.RED}{Color.BOLD}Bad{Color.D}:{client["mac"]} {InfoStringToPrintForEachMac}', " First:", time.strftime("%b%a%d %H:%M", first), "  LastSeen:", time.strftime("%b%a%d %H:%M", last),f"{Color.D}" )
+            print(f'{Color.RED}{Color.BOLD}Bad{Color.D}:{client["mac"]} {InfoStringToPrintForEachMac}',
+                  " First:", time.strftime("%b%a%d %H:%M", first), "  LastSeen:", time.strftime("%b%a%d %H:%M", last),f"{Color.D}" )
             macs.append(client["mac"])
-        else:
+        elif not cronExecution:
             print(f'Mac:{client["mac"]}', InfoStringToPrintForEachMac)
         
         if ("use_fixedip" not in client and
@@ -114,7 +136,8 @@ def client_macs(client_list):
             #print(f'Appending Mac: {client["mac"]}')
             macs.append(client["mac"])
             
-    print("[*] {!s} clients identified for purge".format(len(macs)))
+    if not cronExecution:
+        print("[*] {!s} clients identified for purge".format(len(macs)))
     #print("All keys found:", cKeys)
     removeDuplicates = set(macs)
     macs = list(removeDuplicates)
@@ -129,8 +152,9 @@ if __name__ == "__main__":
     success = api_login(sess=sess, base_url=base_url)
     if success:
         client_list = api_get_clients(sess=sess, base_url=base_url, site_name=site_name)
+        TotalClients = len(client_list)
         macs = client_macs(client_list=client_list)
-        if len(macs) == 0: 
+        if len(macs) == 0 and not cronExecution:
             print("No Macs identified for purge")
         else:
             if len(sys.argv) > 1 and sys.argv[1] == "--delete":
