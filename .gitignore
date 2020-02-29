@@ -130,3 +130,6 @@ dmypy.json
 .idea
 .project
 .pydevproject
+Stripped.*json*
+Cleaned.*json*
+
