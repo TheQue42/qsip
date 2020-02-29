@@ -3,9 +3,14 @@ import requests
 from urllib.parse import urljoin
 import sys
 import json
+import os
 
-username = "admin"
-password = "Dont LETMe Thje Fuck iN"
+try:
+    username = os.environ["UNIFI_ADMIN"]
+    password = os.environ["UNIFI_ADMIN_PASS"]
+except:
+    print("You need to:\n source getUnifiPass.sh")
+    sys.exit(1)
 
 cloud_key_ip = "10.9.24.22"
 controller_port = 8443
@@ -106,8 +111,8 @@ def client_macs(client_list):
             ("tx_packets" in client and client["tx_packets"] == 0)
             and ("rx_packets" in client and client["rx_packets"] == 0)
             and "mac" in client ):
-            print(f'Appending Mac: {client["mac"]}')
-            #macs.append(client["mac"])
+            #print(f'Appending Mac: {client["mac"]}')
+            macs.append(client["mac"])
             
     print("[*] {!s} clients identified for purge".format(len(macs)))
     #print("All keys found:", cKeys)
@@ -115,12 +120,12 @@ def client_macs(client_list):
     macs = list(removeDuplicates)
     return macs
 
-
+## TODO: Params --printGood -q
 if __name__ == "__main__":
     sess = requests.Session()
     sess.verify = False
     requests.packages.urllib3.disable_warnings()
-    print("Params", sys.argv)
+    #print("Params", sys.argv)
     success = api_login(sess=sess, base_url=base_url)
     if success:
         client_list = api_get_clients(sess=sess, base_url=base_url, site_name=site_name)
@@ -130,4 +135,5 @@ if __name__ == "__main__":
         else:
             if len(sys.argv) > 1 and sys.argv[1] == "--delete":
                 api_del_clients(sess=sess, base_url=base_url, site_name=site_name, macs=macs)
-
+            else:
+                print("--delete not specified, skipping delete")
