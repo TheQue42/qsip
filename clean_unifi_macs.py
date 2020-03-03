@@ -86,16 +86,16 @@ def api_del_clients(sess, base_url, site_name, macs):
     client_list = resp.json()["data"]
     time.sleep(2)
     newClientList = api_get_clients(sess, base_url, site_name)
-    if len(newClientList) == TotalClients:
+    if len(newClientList) == TotalClients and not cronExecution:
         print("Seems We didnt change anything", len(newClientList), TotalClients)
     #json.dumps(resp.json(), indent=2, sort_keys=True, ensure_ascii=False)
-    if cronExecution and len(macs) != len(client_list) or not cronExecution:
+    if not cronExecution:
         print(f'\nPurged Clients Completed With RspCode: {resp.status_code}.\nMacsIn: {len(macs)}, MacsReturned: {len(client_list)}')
     return client_list
 
 
 import time,re
-def client_macs(client_list):
+def find_bad_macs(client_list):
     macs = []
     cKeys=  []
     #All keys: {'name', 'rx_packets', 'tx_packets', '_id', 'tx_bytes', 'is_guest', 'usergroup_id', 'last_seen', 'hostname', 'mac', 'is_wired', 'duration', 'rx_bytes', 'wifi_tx_attempts', 'oui', 'site_id', 'note', 'first_seen', 'noted', 'tx_retries'}
@@ -123,8 +123,9 @@ def client_macs(client_list):
             "tx_packets" not in client and "rx_packets" not in client):
             first = time.localtime(client["first_seen"])
             last = first = time.localtime(client["last_seen"])
-            print(f'{Color.RED}{Color.BOLD}Bad{Color.D}:{client["mac"]} {InfoStringToPrintForEachMac}',
-                  " First:", time.strftime("%b%a%d %H:%M", first), "  LastSeen:", time.strftime("%b%a%d %H:%M", last),f"{Color.D}" )
+            if not cronExecution:
+                print(f'{Color.RED}{Color.BOLD}Bad{Color.D}:{client["mac"]} {InfoStringToPrintForEachMac}',
+                      " First:", time.strftime("%b%a%d %H:%M", first), "  LastSeen:", time.strftime("%b%a%d %H:%M", last),f"{Color.D}" )
             macs.append(client["mac"])
         elif not cronExecution:
             print(f'Mac:{client["mac"]}', InfoStringToPrintForEachMac)
@@ -150,14 +151,27 @@ if __name__ == "__main__":
     requests.packages.urllib3.disable_warnings()
     #print("Params", sys.argv)
     success = api_login(sess=sess, base_url=base_url)
+    #sys.exit(0)
+
     if success:
         client_list = api_get_clients(sess=sess, base_url=base_url, site_name=site_name)
         TotalClients = len(client_list)
-        macs = client_macs(client_list=client_list)
+        macs = find_bad_macs(client_list=client_list)
         if len(macs) == 0 and not cronExecution:
             print("No Macs identified for purge")
         else:
-            if len(sys.argv) > 1 and sys.argv[1] == "--delete":
-                api_del_clients(sess=sess, base_url=base_url, site_name=site_name, macs=macs)
-            else:
-                print("--delete not specified, skipping delete")
+            maxCount = 10
+            while len(macs) > 0 and maxCount >0:
+                deleteReturn = api_del_clients(sess=sess, base_url=base_url, site_name=site_name, macs=macs)
+                if not cronExecution:
+                    print("DelReturn", len(deleteReturn))
+                time.sleep(10.0)
+                client_list = api_get_clients(sess=sess, base_url=base_url, site_name=site_name)
+                TotalClients = len(client_list)
+                macs = find_bad_macs(client_list=client_list)
+                if not cronExecution:
+                    print("ClientList", len(client_list), "BadMacs:", len(macs))
+                maxCount = maxCount - 1
+                # TODO: Store these bad bacs somewhere for stats
+            if len(macs) > 0 and maxCount < 1:
+                print("Attempted Clean TEN times and failed", TotalClients, len(macs))
