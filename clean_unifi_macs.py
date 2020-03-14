@@ -3,7 +3,8 @@ import requests
 from urllib.parse import urljoin
 import sys
 import json
-import os
+import os, argparse
+import time,re
 
 try:
     username = os.environ["UNIFI_ADMIN"]
@@ -94,8 +95,8 @@ def api_del_clients(sess, base_url, site_name, macs):
     return client_list
 
 
-import time,re
-def find_bad_macs(client_list):
+
+def find_bad_macs(client_list, **kwargs):
     macs = []
     cKeys=  []
     #All keys: {'name', 'rx_packets', 'tx_packets', '_id', 'tx_bytes', 'is_guest', 'usergroup_id', 'last_seen', 'hostname', 'mac', 'is_wired', 'duration', 'rx_bytes', 'wifi_tx_attempts', 'oui', 'site_id', 'note', 'first_seen', 'noted', 'tx_retries'}
@@ -127,7 +128,7 @@ def find_bad_macs(client_list):
                 print(f'{Color.RED}{Color.BOLD}Bad{Color.D}:{client["mac"]} {InfoStringToPrintForEachMac}',
                       " First:", time.strftime("%b%a%d %H:%M", first), "  LastSeen:", time.strftime("%b%a%d %H:%M", last),f"{Color.D}" )
             macs.append(client["mac"])
-        elif not cronExecution:
+        elif not cronExecution and not ("skip_valid" in kwargs.keys() ):
             print(f'Mac:{client["mac"]}', InfoStringToPrintForEachMac)
         
         if ("use_fixedip" not in client and
@@ -144,27 +145,79 @@ def find_bad_macs(client_list):
     macs = list(removeDuplicates)
     return macs
 
+def logMacs(macList: list):
+    month= time.strftime("%B")
+    montlyLogFileName = "/var/tmp/macsCleaned_" + month + ".log"
+    dateKey = time.strftime("%b%a%d")
+    try:
+        # Since  we first want to read, then overwrite from start, we'll have to do open() twice..fseek(?)
+        logFile = open(montlyLogFileName, "r")
+        # If the file exists, it should contain something
+        # file_info = os.stat(montlyLogFileName)
+        # if file_info.st_size != 0:
+        macAddressLogs = json.load(logFile)
+        #myDump = json.dumps(macAddressLogs, indent=2, sort_keys=True, ensure_ascii=False)
+        #print("Debug\n", myDump)
+        existingMacs = macAddressLogs[dateKey] if dateKey in macAddressLogs.keys() else []
+        #print(f"Found {len(existingMacs)} existing (for today) macs, in the logfile: [{montlyLogFileName}]. "
+        #        f"Trying to add {len(macList)} more")
+        logFile.close()
+    except OSError as err:
+        print(f"OS Error {err}:", montlyLogFileName)
+
+    try:
+        # Truncate file, we've read from it.
+        logFile = open(montlyLogFileName, "w")
+        #macAddressLogs = {}
+        #macAddressLogs[dateKey] = []
+    except OSError as err:
+        file_info = os.stat(montlyLogFileName)
+        print(f"OS Error {err}:", montlyLogFileName, file_info)
+        os.unlink(montlyLogFileName)
+        sys.exit()
+
+    macs = set(existingMacs+macList)
+    macAddressLogs[dateKey] = list(macs)
+    myDump = json.dumps(macAddressLogs, indent=2, sort_keys=True, ensure_ascii=False)
+    print(myDump)
+    json.dump(macAddressLogs, logFile, indent=2, sort_keys=True, ensure_ascii=False)
+    logFile.close()
+
 ## TODO: Params --printGood -q
 if __name__ == "__main__":
     sess = requests.Session()
     sess.verify = False
     requests.packages.urllib3.disable_warnings()
-    #print("Params", sys.argv)
+    print("Params", sys.argv)
+    cli = argparse.ArgumentParser(
+        # prog="Ha-Storage-Filter",
+        description="Clean unifi db via http api calls",
+        epilog="""
+            Use this program at your OWN RISK. For safety sake, it will never overwrite the original files.
+            """)
+
+    # cli.add_argument('--singleParam', "-l", help="listOnly", default="")
+    # cli.add_argument('--intParam', "-nc", default=3)
+    cli.add_argument('--list-only', "-l", action="store_true", default=False)
+    cli.add_argument('--skip-valid', "--sd", "--skip_defined", action="store_true")
+    cli.add_argument('--dry-run', "-n", action="store_true", default=False)
+    args = cli.parse_args()
+    #print("Listonly:", args.list_only)
     success = api_login(sess=sess, base_url=base_url)
-    #sys.exit(0)
 
     if success:
         client_list = api_get_clients(sess=sess, base_url=base_url, site_name=site_name)
         TotalClients = len(client_list)
-        macs = find_bad_macs(client_list=client_list)
+        macs = find_bad_macs(client_list=client_list, skip_valid=(args.skip_valid))
         if len(macs) == 0 and not cronExecution:
             print("No Macs identified for purge")
         else:
             maxCount = 10
-            while len(macs) > 0 and maxCount >0:
+            logMacs(macs)
+            while (len(macs) > 0 and maxCount >0 and not args.list_only):
                 deleteReturn = api_del_clients(sess=sess, base_url=base_url, site_name=site_name, macs=macs)
                 if not cronExecution:
-                    print("DelReturn", len(deleteReturn))
+                    print(f"DelReturn {len(deleteReturn)}, Count: {maxCount}")
                 time.sleep(10.0)
                 client_list = api_get_clients(sess=sess, base_url=base_url, site_name=site_name)
                 TotalClients = len(client_list)
@@ -175,3 +228,6 @@ if __name__ == "__main__":
                 # TODO: Store these bad bacs somewhere for stats
             if len(macs) > 0 and maxCount < 1:
                 print("Attempted Clean TEN times and failed", TotalClients, len(macs))
+
+
+
