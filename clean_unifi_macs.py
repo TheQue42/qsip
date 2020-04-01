@@ -3,6 +3,7 @@ import requests
 from urllib.parse import urljoin
 import sys
 import json
+from json import JSONDecodeError
 import os, argparse
 import time,re
 
@@ -146,15 +147,17 @@ def find_bad_macs(client_list, **kwargs):
     return macs
 
 def logMacs(macList: list):
-    month= time.strftime("%B")
+    month = time.strftime("%B")
     montlyLogFileName = "/var/tmp/macsCleaned_" + month + ".log"
     dateKey = time.strftime("%b%a%d")
+    existingMacs = []
     try:
         # Since  we first want to read, then overwrite from start, we'll have to do open() twice..fseek(?)
         logFile = open(montlyLogFileName, "r")
         # If the file exists, it should contain something
         # file_info = os.stat(montlyLogFileName)
         # if file_info.st_size != 0:
+        macAddressLogs = {}
         macAddressLogs = json.load(logFile)
         #myDump = json.dumps(macAddressLogs, indent=2, sort_keys=True, ensure_ascii=False)
         #print("Debug\n", myDump)
@@ -164,7 +167,8 @@ def logMacs(macList: list):
         logFile.close()
     except OSError as err:
         print(f"OS Error {err}:", montlyLogFileName)
-
+    except JSONDecodeError as err:
+        print(f"JsonError Error {err}, file:", montlyLogFileName)
     try:
         # Truncate file, we've read from it.
         logFile = open(montlyLogFileName, "w")
@@ -178,8 +182,8 @@ def logMacs(macList: list):
 
     macs = set(existingMacs+macList)
     macAddressLogs[dateKey] = list(macs)
-    myDump = json.dumps(macAddressLogs, indent=2, sort_keys=True, ensure_ascii=False)
-    print(myDump)
+    #myDump = json.dumps(macAddressLogs, indent=2, sort_keys=True, ensure_ascii=False)
+    #print(myDump)
     json.dump(macAddressLogs, logFile, indent=2, sort_keys=True, ensure_ascii=False)
     logFile.close()
 
@@ -188,7 +192,7 @@ if __name__ == "__main__":
     sess = requests.Session()
     sess.verify = False
     requests.packages.urllib3.disable_warnings()
-    print("Params", sys.argv)
+   # print("Params", sys.argv)
     cli = argparse.ArgumentParser(
         # prog="Ha-Storage-Filter",
         description="Clean unifi db via http api calls",
@@ -217,13 +221,13 @@ if __name__ == "__main__":
             while (len(macs) > 0 and maxCount >0 and not args.list_only):
                 deleteReturn = api_del_clients(sess=sess, base_url=base_url, site_name=site_name, macs=macs)
                 if not cronExecution:
-                    print(f"DelReturn {len(deleteReturn)}, Count: {maxCount}")
+                    print(f"DelReturn {len(deleteReturn)}, LoopCount: {maxCount}")
                 time.sleep(10.0)
                 client_list = api_get_clients(sess=sess, base_url=base_url, site_name=site_name)
                 TotalClients = len(client_list)
                 macs = find_bad_macs(client_list=client_list)
                 if not cronExecution:
-                    print("ClientList", len(client_list), "BadMacs:", len(macs))
+                    print("TotalClientList", len(client_list), "BadMacs:", len(macs))
                 maxCount = maxCount - 1
                 # TODO: Store these bad bacs somewhere for stats
             if len(macs) > 0 and maxCount < 1:
