@@ -86,7 +86,8 @@ def api_del_clients(sess, base_url, site_name, macs):
     url = urljoin(base_url, "/api/s/{site_name}/cmd/stamgr".format(site_name=site_name))
     resp = sess.post(url, json=payload)
     client_list = resp.json()["data"]
-    time.sleep(2)
+    print("HttpDelResponse:", resp, "Json:", resp.json())
+    time.sleep(4)
     newClientList = api_get_clients(sess, base_url, site_name)
     if len(newClientList) == TotalClients and not cronExecution:
         print("Seems We didnt change anything", len(newClientList), TotalClients)
@@ -216,13 +217,13 @@ if __name__ == "__main__":
         if len(macs) == 0 and not cronExecution:
             print("No Macs identified for purge")
         else:
-            maxCount = 10
+            maxCount = 8
             logMacs(macs)
             while (len(macs) > 0 and maxCount >0 and not args.list_only):
                 deleteReturn = api_del_clients(sess=sess, base_url=base_url, site_name=site_name, macs=macs)
                 if not cronExecution:
                     print(f"DelReturn {len(deleteReturn)}, LoopCount: {maxCount}")
-                time.sleep(10.0)
+                time.sleep(15.0+(10.0-maxCount))
                 client_list = api_get_clients(sess=sess, base_url=base_url, site_name=site_name)
                 TotalClients = len(client_list)
                 macs = find_bad_macs(client_list=client_list)
@@ -231,7 +232,8 @@ if __name__ == "__main__":
                 maxCount = maxCount - 1
                 # TODO: Store these bad bacs somewhere for stats
             if len(macs) > 0 and maxCount < 1:
-                print("Attempted Clean TEN times and failed", TotalClients, len(macs))
+                print(f"Attempted Clean {maxCount} times and failed. TotalClients{TotalClients}, BadMacs:{len(macs)}")
+                print("Macs:", macs)
 
 
 
