@@ -14,6 +14,8 @@ except:
     print("You need to:\n source getUnifiPass.sh")
     sys.exit(1)
 
+###TQ-TODO: Whitelist certain addresses!
+
 try:
     IsRunningFromCron = os.environ["RUNNING_IN_CRON"]
     cronExecution = True
@@ -84,6 +86,7 @@ def api_get_clients(sess, base_url, site_name):
 def api_del_clients(sess, base_url, site_name, macs):
     payload = {"cmd": "forget-sta", "macs": macs}
     url = urljoin(base_url, "/api/s/{site_name}/cmd/stamgr".format(site_name=site_name))
+    print("HttpReq:", url, "Json:", payload)
     resp = sess.post(url, json=payload)
     client_list = resp.json()["data"]
     print("HttpDelResponse:", resp, "Json:", resp.json())
@@ -129,7 +132,8 @@ def find_bad_macs(client_list, **kwargs):
             if not cronExecution:
                 print(f'{Color.RED}{Color.BOLD}Bad{Color.D}:{client["mac"]} {InfoStringToPrintForEachMac}',
                       " First:", time.strftime("%b%a%d %H:%M", first), "  LastSeen:", time.strftime("%b%a%d %H:%M", last),f"{Color.D}" )
-            macs.append(client["mac"])
+            print(f"Would delete Mac:{client['mac']}")
+            #macs.append(client["mac"])
         elif not cronExecution and not ("skip_valid" in kwargs.keys() ):
             print(f'Mac:{client["mac"]}', InfoStringToPrintForEachMac)
         
@@ -217,7 +221,8 @@ if __name__ == "__main__":
         if len(macs) == 0 and not cronExecution:
             print("No Macs identified for purge")
         else:
-            maxCount = 8
+            initMax = 8
+            maxCount = initMax
             logMacs(macs)
             while (len(macs) > 0 and maxCount >0 and not args.list_only):
                 deleteReturn = api_del_clients(sess=sess, base_url=base_url, site_name=site_name, macs=macs)
@@ -232,7 +237,7 @@ if __name__ == "__main__":
                 maxCount = maxCount - 1
                 # TODO: Store these bad bacs somewhere for stats
             if len(macs) > 0 and maxCount < 1:
-                print(f"Attempted Clean {maxCount} times and failed. TotalClients{TotalClients}, BadMacs:{len(macs)}")
+                print(f"Attempted Clean {initMax} times and failed. TotalClients{TotalClients}, BadMacs:{len(macs)}")
                 print("Macs:", macs)
 
 

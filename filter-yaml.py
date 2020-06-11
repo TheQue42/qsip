@@ -182,7 +182,7 @@ def _createArgParser():
     #cli.add_argument('--out', "-o", nargs='?', default=sys.stdout)  #type=argparse.FileType('w')
 
     cli.add_argument('--nullcount', "-nc", default=3)
-    cli.add_argument('--list-pattern', "-l", "-lp", nargs="?", default=None, const=".*")
+    cli.add_argument('--list-pattern', "-l", "-lp", nargs="?", default=None, const=".*", help="List the keys that can be used in pattern filter")
     cli.add_argument('--unify', "-U", help="match default unifi entries")  # List fields from registry files.
 
     fromWhere = cli.add_mutually_exclusive_group(required=True)
