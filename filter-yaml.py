@@ -182,7 +182,8 @@ def _createArgParser():
     #cli.add_argument('--out', "-o", nargs='?', default=sys.stdout)  #type=argparse.FileType('w')
 
     cli.add_argument('--nullcount', "-nc", default=3)
-    cli.add_argument('--list-pattern', "-l", "-lp", nargs="?", default=None, const=".*", help="List the keys that can be used in pattern filter")
+    cli.add_argument('--list-pattern', "-l", "-lp", nargs="?", default=None, const=".*",
+                     help="List the keys that can be used in pattern filter")
     cli.add_argument('--unify', "-U", help="match default unifi entries")  # List fields from registry files.
 
     fromWhere = cli.add_mutually_exclusive_group(required=True)
@@ -265,8 +266,8 @@ def main(argv = None):
     strippedFile = open(FILE_OUT_STRIPPED, "w")
 
     # TODO : Unicode handling!? Swedish/International char's in names
-    json.dump(whatsLeft, cleanedFile, indent=2, sort_keys=True, ensure_ascii=False)
-    json.dump(filteredData, strippedFile, indent=2, sort_keys=True, ensure_ascii=False)
+    json.dump(whatsLeft, cleanedFile, indent=4, sort_keys=False, ensure_ascii=False)
+    json.dump(filteredData, strippedFile, indent=4, sort_keys=True, ensure_ascii=False)
     cleanedFile.close()
     strippedFile.close()
     os.system("ls -lF *.json*")
