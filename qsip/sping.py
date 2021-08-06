@@ -35,7 +35,7 @@ if __name__ == "__main__":
     #print(f"ch is ({ch})")
     if 1 == 1:
         q.sendRequest(req_method="OPTIONS",
-                      request_uri="taisto@nisse.se", next_hop=NextHop("10.9.24.1", 5060, "UDP"),
+                      request_uri="taisto@nisse.se", next_hop=NextHop("10.9.24.44", 5060, "UDP"),
                       req_from={"uri": "sip:kenneth@ip-s.se", "display_name": "Kenneth Den Store"},
                       # Cant add custom from-tag.
                       req_to={"uri": "taisto@ip-s.se", "display_name": "TaistoQvist"},

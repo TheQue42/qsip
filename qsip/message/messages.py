@@ -8,7 +8,7 @@ from qsip.common.enums import *
 class Msg:
     """Base class for SIP Request and Response"""
 
-    # TODO: Make it impossible to instansiate base Msg class?
+    # TODO: Make it impossible to instantiate base Msg class?
 
     def __init__(self, *, method: str, body="", header_list: HeaderList):
         """" Base class for SIP Messages """

@@ -27,7 +27,7 @@ def routeRequest(sip_request: Request):
         next_hop_uri = sip_request._request_uri
         host = next_hop_uri.host_port
     print(f"Next_Hop_Uri: {next_hop_uri}, hp:{host} X:", type(host))
-    return (host.addr, host.port, PROTOCOL.UDP)
+    return (host.addr, host.port, PROTOCOL.UDP) ###TODO Hardcoded to UDP
 
 
 class QSipUa(TxnUser):  # We dont really need the interface-concept...DuckTyping.
@@ -48,7 +48,7 @@ class QSipUa(TxnUser):  # We dont really need the interface-concept...DuckTyping
         # print("IN2", localTcpInfo, type(localTcpInfo))
 #        assert isinstance(localUdpInfo, IpSrc) and isinstance(localTcpInfo, IpSrc), \
  #           "Local IP cfg NOT supplied as dict{addr/port}"
-
+        # Dont we need a isinstance-type check on localPorts here?
         self._udpSource = [p for p in localPorts if p.proto == PROTOCOL.UDP and p.port != 0]
         self._tcpSource = [p for p in localPorts if p.proto == PROTOCOL.TCP and p.port != 0]
         #print(f"udp, {type(self._udpSource)}, type2 {type(self._tcpSource)}", self._udpSource, self._tcpSource)

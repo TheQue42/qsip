@@ -21,7 +21,7 @@ class IpInfo(_IpInfo):
             p = proto
         return super(IpInfo, cls).__new__(cls, addr, port, p)
 
-#    __slots__ = ()
+    #    __slots__ = ()
     # It feels somewhat weird to NOT define __init_ here,
     # I wanted to do the proto/string=>Enum there, but the call to super() fails...
     # def __init__(self, addr, port, proto):
